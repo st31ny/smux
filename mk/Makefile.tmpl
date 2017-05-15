@@ -1,0 +1,21 @@
+####################################################################################################
+## vim:set ft=make: ################################################################################
+## Project Makefile Template #######################################################################
+####################################################################################################
+
+BUILDIR                 ?= .
+MYDIR                   := $(dir $(lastword $(MAKEFILE_LIST)))
+
+## Package config
+PKG                     := example
+
+CXXFLAGS.$(PKG)          = -g -O2 -Wall -std=c++11 -pthread
+LDFLAGS.$(PKG)           = -pthread
+
+## Local files
+INST_ETC                := example_config.xml>config.xml
+
+## Recursion
+SUBDIRS                 := src libs
+
+include $(BUILDIR)/mk/pkg.mk

@@ -1,0 +1,13 @@
+## Makefile template for subdirs
+# vim:set ft=make:
+
+MYDIR                   := $(dir $(lastword $(MAKEFILE_LIST)))
+
+SRC_CXX                 := src/plugin.cpp
+SRC_CXX_test            := test/testplugin_test.cpp
+
+INST_SHARE              := helper.py>plugins/testplugin/helper.py
+
+SUBDIRS                 := testplugin
+
+include $(BUILDIR)/mk/dir.mk

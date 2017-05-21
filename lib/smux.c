@@ -194,6 +194,13 @@ ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_
         }
     }
 
+    // optimization: reset head and tail if buffer empty
+    if(read_buf_tail == read_buf_head)
+    {
+        read_buf_tail = 0;
+        read_buf_head = 0;
+    }
+
     // write indexes and receiver state back
     config->_internal.read_buf_tail = read_buf_tail;
     config->_internal.read_buf_head = read_buf_head;
@@ -227,6 +234,13 @@ ssize_t smux_flush(struct smux_config *config)
                 break;
 
             write_buf_tail = ADJRBI(write_buf_tail + ret, write_buf_size);
+        }
+
+        // optimization: if buffer is empty, reset head and tail to beginning
+        if(write_buf_tail == write_buf_head)
+        {
+            config->_internal.write_buf_head = 0;
+            write_buf_tail = 0;
         }
 
         // write new tail index back

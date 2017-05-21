@@ -44,7 +44,7 @@ extern "C" {
  */
 
 /// identifiers of virtual channels
-typedef unsigned int smux_channel;
+typedef unsigned char smux_channel;
 
 /**
  * \brief                   function for writing multiplexed data
@@ -140,7 +140,14 @@ struct smux_config
      */
     struct
     {
-        // current receiver channel
+        // write ring buffer indexes
+        unsigned write_buf_head; // next character to write
+        unsigned write_buf_tail; // next character to read
+        // read ring buffer indexes
+        unsigned read_buf_head; // next character to write
+        unsigned read_buf_tail; // next character to read
+        // current receiver state
+        smux_channel recv_ch;
         size_t recv_chars;
     } _internal;
 };
@@ -176,14 +183,10 @@ void smux_free(struct smux_config *config);
  * \param count             number of bytes to send
  * \retval >0               number of bytes moved to the write buffer
  * \retval  0               write buffer is full
- * \retval <0               error (from the write function)
  *
- * First, this functions copies the data to the internal write buffer (using the
- * SMUX protocol).
- *
- * It then tries to send it (if config->buffer.write_fn is not NULL). However, a
- * return value >0 does not mean that this amount of data has actually been written.
- * See smux_flush().
+ * This functions only copies the data into the internal write buffer (using the
+ * SMUX protocol). It does not attempt to write data using the write function
+ * (see smux_flush() for this).
  */
 ssize_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count);
 
@@ -218,6 +221,8 @@ ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_
  * buffer contents. The configured write function is called several times until either
  * the write buffer is empty (return 0), the write function returned 0 (return >0) or
  * the write function has signalled an error (return <0).
+ *
+ * In case of an error, the buffer state is reverted, so the failing write is "undone".
  */
 ssize_t smux_flush(struct smux_config *config);
 

@@ -77,7 +77,7 @@ typedef ssize_t (*smux_read_fn)(int fd, void *buf, size_t count);
 struct smux_config
 {
     /**
-     * \brief                   protocoll settings
+     * \brief                   protocol settings
      *
      * This part defines protocol adjustments that NEED TO BE IDENTICAL on both sides of
      * the connection. To keep a smux connection stateless, they are not synced/compared
@@ -134,7 +134,7 @@ struct smux_config
     /**
      * \brief                   internal state
      *
-     * This internal part keeps necessary state accross multiple calls to the smux
+     * This internal part keeps necessary state across multiple calls to the smux
      * interface.
      * Applications shall not access it directly.
      */
@@ -169,9 +169,7 @@ void smux_init(struct smux_config *config);
 
 /**
  * \brief                   free ressources allocated by smux_init()
- * \param[in,out] config    pointer to an initialized smux_config.
- *
- * Currently, this function does nothing.
+ * \param[in,out] config    pointer to an initialized smux_config
  */
 void smux_free(struct smux_config *config);
 

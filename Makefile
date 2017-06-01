@@ -11,7 +11,7 @@ MYDIR                   := $(dir $(lastword $(MAKEFILE_LIST)))
 ## Package config
 PKG                     := smux
 
-CXXFLAGS.$(PKG)          = -g -O2 -Wall -std=c++11
+CXXFLAGS.$(PKG)          = -g -O2 -Wall -Wextra -std=c++11
 LDFLAGS.$(PKG)           =
 
 # smux lib

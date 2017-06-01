@@ -13,7 +13,7 @@ PKG                     := libsmux
 
 TARGETNAME.$(PKG)_main  := libsmux.a
 
-CFLAGS.$(PKG)            = -g -O2 -Wall
+CFLAGS.$(PKG)            = -g -O2 -Wall -Wextra
 $(eval CFLAGS.$(PKG)    += -I"$(MYDIR)/../include")
 LDFLAGS.$(PKG)           =
 

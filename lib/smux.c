@@ -2,14 +2,25 @@
 #include <smux.h>
 
 // adjust ring buffer index
-#define ADJRBI(i, s) ((i) >= (s) ? (i)-(s) : (i))
-// used elements in the buffer (given head, tail and size)
-#define RBUSED(h, t, s) ((h)>=(t) ? (h)-(t) : (s)-(t)+(h))
+static inline
+unsigned ADJRBI(unsigned i, size_t s)
+{
+  return i >= s ? i - s : i;
+}
+
+static inline
+size_t RBUSED(unsigned h, unsigned t, size_t s)
+{
+  return h >= t ? h - t : s - t + h;
+}
 
 // protocol properties
-#define PROTO_CHANNEL_BYTES 1
-#define PROTO_SIZE_BYTES 2
-#define PROTO_MAX_SIZE ((1l<<PROTO_SIZE_BYTES*8)-1)
+enum
+{
+  PROTO_CHANNEL_BYTES = 1,
+  PROTO_SIZE_BYTES    = 2,
+  PROTO_MAX_SIZE      = (1 << PROTO_SIZE_BYTES * 8) - 1,
+};
 
 void smux_init(struct smux_config *config)
 {

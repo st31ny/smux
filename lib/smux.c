@@ -1,5 +1,6 @@
 // smux.c
 #include <smux.h>
+#include <string.h>
 
 // adjust ring buffer index
 static inline
@@ -25,8 +26,7 @@ enum
 void smux_init(struct smux_config *config)
 {
     // just zero-initialize everything
-    static struct smux_config zero_config;
-    *config = zero_config;
+    memset(config, 0, sizeof(*config));
 
     // non-zero stuff
     config->proto.esc = '\x01';

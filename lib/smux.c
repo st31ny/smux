@@ -118,7 +118,7 @@ ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_
     size_t read_buf_size = config->buffer.read_buf_size;
     size_t read_buf_used = RBUSED(read_buf_head, read_buf_tail, read_buf_size);
     smux_read_fn read_fn = config->buffer.read_fn;
-    int fd = config->buffer.read_fd;
+    void *fd = config->buffer.read_fd;
     smux_channel recv_ch = config->_internal.recv_ch; // current channel
     size_t recv_chars = config->_internal.recv_chars; // remaining payload chars
     char esc = config->proto.esc;
@@ -228,7 +228,7 @@ ssize_t smux_flush(struct smux_config *config)
     unsigned write_buf_tail = config->_internal.write_buf_tail;
     size_t write_buf_size = config->buffer.write_buf_size;
     smux_write_fn write_fn = config->buffer.write_fn;
-    int fd = config->buffer.write_fd;
+    void *fd = config->buffer.write_fd;
 
     ssize_t ret;
     unsigned end;

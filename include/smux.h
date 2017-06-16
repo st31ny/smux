@@ -48,23 +48,23 @@ typedef unsigned char smux_channel;
 
 /**
  * \brief                   function for writing multiplexed data
- * \param fd                file descriptor (or any int)
+ * \param fd                pointer to user data (e.g., a file descriptor)
  * \param buf               data buffer to send
  * \param count             number of bytes in buf
  * \retval >=0              number of bytes written
  * \retval  <0              error
  */
-typedef ssize_t (*smux_write_fn)(int fd, const void *buf, size_t count);
+typedef ssize_t (*smux_write_fn)(void *fd, const void *buf, size_t count);
 
 /**
  * \brief                   function for reading multiplexed data
- * \param fd                file descriptor (or any int)
+ * \param fd                pointer to user data (e.g., a file descriptor)
  * \param[out] buf          buffer to write read data to
  * \param count             maximum number of bytes to read
  * \retval >=0              number of read bytes
  * \retval  <0              error
  */
-typedef ssize_t (*smux_read_fn)(int fd, void *buf, size_t count);
+typedef ssize_t (*smux_read_fn)(void *fd, void *buf, size_t count);
 
 /**
  * \brief                   configuration struct
@@ -115,7 +115,7 @@ struct smux_config
          */
         smux_write_fn write_fn;
         /// data (file descriptor) to pass to write_fn
-        int write_fd;
+        void *write_fd;
 
         /**
          * \brief                   read function to read multiplexed data from
@@ -128,7 +128,7 @@ struct smux_config
          */
         smux_read_fn read_fn;
         /// data (file descriptor) to pass to read_fn
-        int read_fd;
+        void *read_fd;
     } buffer;
 
     /**

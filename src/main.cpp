@@ -4,15 +4,14 @@
 #include <chrono>
 #include <stdlib.h>
 #include <unistd.h>
-#include <smux.h>
-
+#include <smux.hpp>
 
 int main(int argc, const char* argv[])
 {
     if(argc != 2 || (*argv[1] != 'e' && *argv[1] != 'd'))
     {
         std::cerr << "Usage:\n"
-            << argv[0] << " (e|d) file\n"
+            << argv[0] << " (e|d)\n"
             << " e    ... encode (to different channels, changing on character @)\n"
             << " d    ... decode\n"
             << std::flush;
@@ -22,54 +21,35 @@ int main(int argc, const char* argv[])
     if(*argv[1] == 'd')
         fEncode = false;
 
-    size_t bufSize = 16;
+    smux::connection con;
 
-    smux_config sconfig;
-    smux_init(&sconfig);
+    con.smux()->proto.esc = 'X';
 
-    sconfig.proto.esc = 'X';
+    con.set_write_fn([](const void* buf, size_t count) { return write(STDOUT_FILENO, buf, count); });
+    con.set_read_fn([](void* buf, size_t count) { return read(STDIN_FILENO, buf, count); } );
 
-    sconfig.buffer.write_buf = malloc(bufSize);
-    sconfig.buffer.write_buf_size = bufSize;
-    sconfig.buffer.write_fn = write;
-    sconfig.buffer.write_fd = STDOUT_FILENO;
-
-    sconfig.buffer.read_buf = malloc(bufSize);
-    sconfig.buffer.read_buf_size = bufSize;
-    sconfig.buffer.read_fn = read;
-    sconfig.buffer.read_fd = STDIN_FILENO;
-
-    smux_channel ch = 0;
+    smux::ostream out(con);
     if(fEncode)
     {
         // keep sending
         std::string str;
         while(std::cin >> str)
         {
-            std::clog << "send on channel " << static_cast<unsigned>(ch) << std::endl;
-            unsigned begin = 0;
-            unsigned end = str.size();
-            while(begin < end)
-            {
-                begin += smux_send(&sconfig, ch, str.data() + begin, end - begin);
-                if(smux_flush(&sconfig) < 0)
-                {
-                    std::cerr << "flushing failed" << std::endl;
-                    return 1;
-                }
-            }
+            std::clog << "send on channel " << static_cast<unsigned>(out.channel()) << std::endl;
+            out << str << std::flush;
             if(str.find('@') != std::string::npos)
-                ch = (ch + 1) % 5;
+                out.channel((out.channel() + 1) % 5);
         }
     } else
     {
         char buf[32];
         ssize_t ret;
+        smux_channel ch;
 
         // keep receiving
         while(1)
         {
-            ret = smux_recv(&sconfig, &ch, buf, sizeof(buf) / sizeof(*buf));
+            ret = smux_recv(con.smux(), &ch, buf, sizeof(buf) / sizeof(*buf));
             if(ret > 0)
             {
                 std::clog << "receive on channel " << static_cast<unsigned>(ch) << std::endl;
@@ -84,6 +64,5 @@ int main(int argc, const char* argv[])
         }
     }
 
-    smux_free(&sconfig);
     return 0;
 }

@@ -140,6 +140,8 @@ namespace smux
         protected:
             template<class charT, class traits, class Alloc>
             friend class basic_ostream;
+            template<class charT, class traits, class Alloc>
+            friend class basic_istream;
 
             // adapter for write function
             static
@@ -207,7 +209,7 @@ namespace smux
                     : _smux(smux), _ch(ch)
                 {}
 
-                int sync()
+                int sync() override
                 {
                     auto data = this->str();
                     ssize_t ret = 0;
@@ -232,7 +234,115 @@ namespace smux
             } _sb;
     };
 
+    /**
+     * \brief                   class to receive data
+     */
+    template <class charT, class traits = std::char_traits<charT>, class Alloc = std::allocator<charT>>
+    class basic_istream : public std::basic_istream<charT, traits>
+    {
+        public:
+            /**
+             * \brief                   ctor
+             * \param smux              a smux connection to receive from
+             */
+            basic_istream(connection& smux)
+                : std::basic_istream<charT, traits>(&_rb) // this is safe according to the standard
+                , _rb(&smux._smux)
+            {
+            }
+
+            /**
+             * \brief                   get the current channel
+             * \return                  current channel
+             */
+            smux_channel channel() const
+            {
+                return _rb._ch;
+            }
+
+            /**
+             * \brief                   reset the stream state to possibly receive from another stream
+             *
+             * Whenever a channel is exhausted (no more characters available), this stream will signal
+             * EOF. This function is necessary to acknowledge this condition, reset the EOF state and
+             * become ready to read from another stream.
+             *
+             * Attention: Quering the current channel() directly after a call to reset() does not
+             * necessarily yield the new channel (e.g., if no new characters have been received yet),
+             * so always first retrieve characters before checking the channel.
+             */
+            void reset()
+            {
+                this->clear();
+                _rb._fReset = true;
+            }
+
+        private:
+            struct recvbuf : std::basic_streambuf<charT, traits>
+            {
+                recvbuf(smux_config* smux)
+                    : _smux(smux)
+                    , _size(0)
+                    , _fReset(true)
+                {
+                    _buf.resize(_smux->buffer.read_buf_size);
+                    // make the entire capacity available
+                    if(_buf.capacity() > _buf.size())
+                        _buf.resize(_buf.capacity());
+
+                    auto end = _buf.data() + _buf.size();
+                    this->setg(end, end, end);
+                }
+
+                typename traits::int_type underflow() override
+                {
+                    std::clog << 'u';
+                    if(this->gptr() == this->egptr())
+                    {
+                        // TODO: Is this wise here? Otherwise, smux_recv hangs,
+                        // waiting for characters.
+                        if(!_fReset)
+                            return traits::eof();
+
+                        if(_size == 0) // no new data available?
+                        {
+                            ssize_t result = smux_recv(_smux, &_chNext, _buf.data(), _buf.size());
+                            if(result >= 0)
+                            {
+                                _size = result;
+                            } else
+                            {
+                                // error
+                                // TODO: signal error to stream
+                                return traits::eof();
+                            }
+                        }
+
+                        // make data available iff in reset state
+                        if(_fReset)
+                        {
+                            _fReset = false;
+                            _ch = _chNext;
+                            this->setg(_buf.data(), _buf.data(), _buf.data() + _size);
+                            _size = 0;
+                        }
+                    }
+
+                    return this->gptr() == this->egptr()
+                        ? traits::eof()
+                        : traits::to_int_type(*this->gptr());
+                }
+
+                smux_config* _smux;
+                std::vector<charT, Alloc> _buf;
+                smux_channel _ch, _chNext; // current and next channel
+                size_t _size; // valid chars in _buf
+                bool _fReset; // true to accept a new channel
+            } _rb;
+    };
+
     using ostream = basic_ostream<char>;
+    using istream = basic_istream<char>;
 
 } // namespace smux
 

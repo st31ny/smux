@@ -3,7 +3,7 @@
 #define _FILE_H_INCLUDED_
 
 #include <cstddef>
-#include <vector>
+#include <unordered_set>
 #include <utility>
 
 #include "errors.h"
@@ -11,60 +11,56 @@
 namespace smux_client
 {
     /**
-     * \brief                   class for file descriptors
-     * \param T                 raw (platform specific) file descriptor type
+     * \brief                   type for file descriptors
      */
-    template<class T>
-    class basic_file_descriptor
-    {
-        public:
-            using raw_fd_type = T;
-
-            /**
-             * \brief                   ctor
-             * \param fd                raw file descriptor
-             */
-            explicit basic_file_descriptor(raw_fd_type fd)
-                : _fd(std::move(fd))
-            {
-            }
-
-            /**
-             * \brief                   get raw file descriptor
-             * \return                  raw file descriptor
-             */
-            raw_fd_type const& raw() const
-            {
-                return _fd;
-            }
-
-        private:
-            raw_fd_type _fd;
-    };
-
-    template<class FD>
-    using basic_file_descriptor_list = std::vector<FD>;
+    using file_descriptor = int;
 
     /**
-     * \brief                   base class for files
-     * \param FD                file descriptor type
-     *
-     * Objects of derived classes manage resources for reading from and writing to files. A single
+     * \brief                   type for sets of file descriptors
      */
-    template<class FD, class FD_LIST = basic_file_descriptor_list<FD>>
+    template<class FD>
+    using basic_file_descriptor_set = std::unordered_set<FD>;
+    using file_descriptor_set = basic_file_descriptor_set<file_descriptor>;
+
+    /**
+     * \brief                   read/write mode for files
+     */
+    enum class file_mode : int
+    {
+        in  = 4, ///< open file for reading
+        out = 2, ///< open file for writing
+        io  = 6, ///< open file for reading and writing
+    };
+
+    /**
+     * \brief                   base file interface
+     * \param FD                file descriptor type
+     * \param FD_SET            type for sets of file descriptors
+     */
+    template<class FD, class FD_SET = basic_file_descriptor_set<FD>>
     class basic_file
     {
         public:
             using fd_type = FD;
-            using fd_list_type = FD_LIST;
+            using fd_set_type = FD_SET;
+
+            /**
+             * \brief                   ctor
+             * \param mode              file mode
+             */
+            basic_file(file_mode mode)
+                : _mode(mode)
+            {}
 
             /**
              * \brief                   read from the file
              * \param[out] buf          buffer to write the read data to
              * \param count             size of the buffer
              * \param fd                file descriptor that signaled a read event
-             * \return                  actual number of read bytes
+             * \return                  actual number of read bytes (0 in case of EOF)
              * \throw                   system_error
+             *
+             * Note: count can be 0. See select_lists() for details.
              */
             virtual std::size_t read(void* buf, std::size_t count, fd_type const& fd) = 0;
 
@@ -81,7 +77,6 @@ namespace smux_client
             /**
              * \brief                   handle exception
              * \param fd                file descriptor that signaled an exception event
-             * \return                  actual number of written bytes
              * \throw                   system_error
              *
              * This function is called when a file descriptor signaled an exception.
@@ -97,30 +92,20 @@ namespace smux_client
              * When one of the events occurs, the appropriate handler is called. Then, this
              * function is called again in order to re-build the (potentially different) list
              * of file descriptors.
-             */
-            virtual void select_lists(fd_list_type& read_fds, fd_list_type& write_fds, fd_list_type& except_fds) = 0;
-
-            /**
-             * \brief                   check if errors have occurred
-             * \return                  true if file is in failed state
              *
-             * When a file is in a failed state, no attempt to read from or write to it should be made.
+             * Note: The file descriptors in write_fds are only hooked up if there is data to be written.
+             * However, file descriptors in read_fds are always monitored, but read() might be called with
+             * count == 0 if a file is used for output only.
              */
-            virtual bool failed() const noexcept = 0;
+            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) = 0;
 
             /**
-             * \brief                   check if file has reached eof
-             * \return                  true if file has reached its end of file
+             * \brief                   get the file mode
+             * \return                  file mode
              */
-            virtual bool eof() const noexcept = 0;
-
-            /**
-             * \brief                   check if file has neither failed nor is at its eof
-             * \return                  true if file is good for further operations
-             */
-            bool good() const noexcept
+            file_mode mode() const
             {
-                return !(failed() || eof());
+                return _mode;
             }
 
             /**
@@ -129,11 +114,13 @@ namespace smux_client
             virtual ~basic_file()
             {
             }
+
+        protected:
+            file_mode _mode;
     };
 
-    using file_descriptor = basic_file_descriptor<int>;
-    using file_descriptor_list = basic_file_descriptor_list<file_descriptor>;
-    using file = basic_file<file_descriptor, file_descriptor_list>;
+    using file = basic_file<file_descriptor, file_descriptor_set>;
+
 
 } // namespace smux_client
 

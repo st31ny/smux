@@ -3,6 +3,6 @@
 
 MYDIR                   := $(dir $(lastword $(MAKEFILE_LIST)))
 
-SRC_CXX                 := main.cpp file_factory.cpp files.cpp
+SRC_CXX                 := main.cpp file_factory.cpp files.cpp rt.cpp
 
 include $(BUILDIR)/mk/dir.mk

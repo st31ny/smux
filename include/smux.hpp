@@ -29,7 +29,7 @@ namespace smux
      *
      * All exceptions thrown by this library are derived from this class.
      */
-    class error : std::runtime_error
+    class error : public std::runtime_error
     {
         public:
             using std::runtime_error::runtime_error;
@@ -38,7 +38,7 @@ namespace smux
     /**
      * \brief                   configuration error
      */
-    class config_error : error
+    class config_error : public error
     {
         public:
             using error::error;
@@ -296,7 +296,6 @@ namespace smux
 
                 typename traits::int_type underflow() override
                 {
-                    std::clog << 'u';
                     if(this->gptr() == this->egptr())
                     {
                         // TODO: Is this wise here? Otherwise, smux_recv hangs,

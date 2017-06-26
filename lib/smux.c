@@ -38,7 +38,7 @@ void smux_free(struct smux_config *config)
     // no clean-up needed currently
 }
 
-ssize_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count)
+size_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count)
 {
     char *write_buf = (char*)config->buffer.write_buf;
     unsigned write_buf_head = config->_internal.write_buf_head;
@@ -110,51 +110,18 @@ ssize_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, 
     return count_copied;
 }
 
-ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t count)
+size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t count)
 {
     char *read_buf = (char*)config->buffer.read_buf;
     unsigned read_buf_head = config->_internal.read_buf_head;
     unsigned read_buf_tail = config->_internal.read_buf_tail;
     size_t read_buf_size = config->buffer.read_buf_size;
-    size_t read_buf_used = RBUSED(read_buf_head, read_buf_tail, read_buf_size);
-    smux_read_fn read_fn = config->buffer.read_fn;
-    void *fd = config->buffer.read_fd;
     smux_channel recv_ch = config->_internal.recv_ch; // current channel
     size_t recv_chars = config->_internal.recv_chars; // remaining payload chars
     char esc = config->proto.esc;
 
-    ssize_t ret = 1;
-    unsigned end;
     char* output_buf = (char*)buf;
     size_t count_copied = 0;
-
-    // enough data available or fetch?
-    while(read_buf_used == 0 || // buffer empty
-       (read_buf[read_buf_tail] == esc && read_buf_used == 1) || // incomplete escape sequence
-       (read_buf[read_buf_tail] == esc && read_buf[ADJRBI(read_buf_tail + 1, read_buf_size)] != 0 &&
-          read_buf_used < 1 + PROTO_CHANNEL_BYTES + PROTO_SIZE_BYTES) // incomplete ch esc seq
-    )
-    {
-        if(!read_fn)
-            return 0;
-
-        // leave one byte space to ensure separation of buffer full/empty
-        end = read_buf_tail <= read_buf_head ? read_buf_size : read_buf_tail - 1;
-        if(read_buf_tail == 0)
-            end = read_buf_size - 1;
-        ret = read_fn(fd, (void*)(read_buf + read_buf_head), end - read_buf_head);
-        if(ret <= 0)
-            break;
-
-        read_buf_head = ADJRBI(read_buf_head + ret, read_buf_size);
-        read_buf_used += ret;
-    }
-
-    config->_internal.read_buf_head = read_buf_head;
-    // on error, always return for propor error handling
-    // if ret == 0, not enough chars were received
-    if(ret <= 0)
-        return ret;
 
     // read buffer byte wise
     *ch = recv_ch;
@@ -221,7 +188,7 @@ ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_
     return count_copied;
 }
 
-ssize_t smux_flush(struct smux_config *config)
+ssize_t smux_write(struct smux_config *config)
 {
     char *write_buf = (char*)config->buffer.write_buf;
     unsigned write_buf_head = config->_internal.write_buf_head;
@@ -261,4 +228,46 @@ ssize_t smux_flush(struct smux_config *config)
             return ret;
     }
     return RBUSED(write_buf_head, write_buf_tail, write_buf_size);
+}
+
+ssize_t smux_read(struct smux_config *config)
+{
+    char *read_buf = (char*)config->buffer.read_buf;
+    unsigned read_buf_head = config->_internal.read_buf_head;
+    unsigned read_buf_tail = config->_internal.read_buf_tail;
+    size_t read_buf_size = config->buffer.read_buf_size;
+    smux_read_fn read_fn = config->buffer.read_fn;
+    void *fd = config->buffer.read_fd;
+
+    ssize_t ret;
+    unsigned end, count;
+
+    if(read_fn)
+    {
+        // leave one byte space to ensure separation of buffer full/empty
+        while(ADJRBI(read_buf_head + 1, read_buf_size) != read_buf_tail)
+        {
+            end = read_buf_tail <= read_buf_head ? read_buf_size : read_buf_tail - 1;
+            if(read_buf_tail == 0)
+                end = read_buf_size - 1;
+
+            count = end - read_buf_head;
+            ret = read_fn(fd, (void*)(read_buf + read_buf_head), count);
+            if(ret <= 0)
+                break;
+
+            read_buf_head = ADJRBI(read_buf_head + ret, read_buf_size);
+            // received less bytes than requested?
+            if((unsigned)ret < count)
+                break;
+        }
+
+        // write new head index back
+        config->_internal.read_buf_head = read_buf_head;
+
+        if(ret < 0) // error?
+            return ret;
+    }
+    // do not count the one byte that always has to stay free
+    return read_buf_size - RBUSED(read_buf_head, read_buf_tail, read_buf_size) - 1;
 }

@@ -212,20 +212,18 @@ namespace smux
                 int sync() override
                 {
                     auto data = this->str();
-                    ssize_t ret = 0;
+                    size_t ret = 0;
                     while(data.size() > 0)
                     {
                         ret = smux_send(_smux, _ch, data.data(), data.size());
                         if(ret <= 0) break;
                         data.erase(0, ret); // remove the part that was written
-                        ret = smux_flush(_smux);
+                        ret = smux_write(_smux);
                         if(ret <= 0) break;
                     }
                     // only keep data that could not be written
                     this->str(data);
 
-                    if(ret < 0)
-                        return -1;
                     return 0;
                 }
 
@@ -305,16 +303,14 @@ namespace smux
 
                         if(_size == 0) // no new data available?
                         {
-                            ssize_t result = smux_recv(_smux, &_chNext, _buf.data(), _buf.size());
-                            if(result >= 0)
-                            {
-                                _size = result;
-                            } else
+                            if(smux_read(_smux) < 0)
                             {
                                 // error
                                 // TODO: signal error to stream
                                 return traits::eof();
                             }
+
+                            _size = smux_recv(_smux, &_chNext, _buf.data(), _buf.size());
                         }
 
                         // make data available iff in reset state

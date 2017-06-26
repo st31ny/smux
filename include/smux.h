@@ -186,7 +186,7 @@ void smux_free(struct smux_config *config);
  * SMUX protocol). It does not attempt to write data using the write function
  * (see smux_flush() for this).
  */
-ssize_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count);
+size_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count);
 
 /**
  * \brief                   receive data from a virtual channel
@@ -196,16 +196,12 @@ ssize_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, 
  * \param count             size of the buffer
  * \retval >0               number of received characters written to buf
  * \retval  0               no data received
- * \retval <0               error (from the read function)
  *
- * If the read buffer is empty, this function tries to read data using the configured
- * read function (if config->buffer.write_fn is not NULL).
- *
- * It then extracts data from the read buffer. If the buffer is not empty, the channel
+ * This function extracts data from the read buffer. If the buffer is not empty, the channel
  * number is written to *ch, the data is copied to buf and the number of copied bytes
  * is returned. Otherwise, the function returns 0 and leaves the channel number untouched.
  */
-ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t count);
+size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t count);
 
 /**
  * \brief                   write multiplexed data using the configured write function
@@ -222,7 +218,22 @@ ssize_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_
  *
  * In case of an error, the buffer state is reverted, so the failing write is "undone".
  */
-ssize_t smux_flush(struct smux_config *config);
+ssize_t smux_write(struct smux_config *config);
+
+/**
+ * \brief                   read multiplexed data into the internal buffer using the
+ *                          configured read function
+ * \param[in,out] config    initialized smux_config
+ * \retval >0               remaining free space in the buffer
+ * \retval  0               read buffer completely filled)
+ * \retval <0               error (from the read function)
+ *
+ * The function can be called if config->buffer.read_fn is not NULL to read data into
+ * the read buffer. The read function is called several times until either the read buffer
+ * is full (return 0), the read function returns less characters than requested (return >0)
+ * or the read function has signalled an error (return <0).
+ */
+ssize_t smux_read(struct smux_config *config);
 
 #ifdef __cplusplus
 }

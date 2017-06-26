@@ -114,6 +114,46 @@ namespace smux
             }
 
             /**
+             * \brief                   low-level send function
+             * \see                     smux_send
+             *
+             * Consider using smux::ostream instead.
+             */
+            size_t send(smux_channel ch, const void *buf, size_t count)
+            {
+                return smux_send(&_smux, ch, buf, count);
+            }
+
+            /**
+             * \brief                   low-level receive function
+             * \see                     smux_recv
+             *
+             * Consider using smux::istream instead.
+             */
+            size_t recv(smux_channel *ch, void *buf, size_t count)
+            {
+                return smux_recv(&_smux, ch, buf, count);
+            }
+
+            /**
+             * \brief                   low-level write function
+             * \see                     smux_write
+             */
+            ssize_t write()
+            {
+                return smux_write(&_smux);
+            }
+
+            /**
+             * \brief                   low-level read function
+             * \see                     smux_read
+             */
+            ssize_t read()
+            {
+                return smux_read(&_smux);
+            }
+
+            /**
              * \brief                   get raw access to the smux config if you are brave
              * \return                  pointer to the used smux_config
              */

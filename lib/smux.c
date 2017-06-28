@@ -126,7 +126,7 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
     // read buffer byte wise
     *ch = recv_ch;
     while(count_copied < count && // caller buffer not full
-        (recv_ch == 0 || count_copied < recv_chars) && // we are still receiving for recv_ch
+        (recv_ch == 0 || recv_chars > 0) && // we are still receiving for recv_ch
         read_buf_head != read_buf_tail // receive buffer not empty
     )
     {
@@ -141,6 +141,7 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
             if(read_buf[read_buf_tail] == 0) // just escape of esc char
             {
                 output_buf[count_copied++] = esc;
+                recv_chars -= 1;
                 read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
             } else // channel information
             {
@@ -168,6 +169,7 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
         } else // normal case (no esc char)
         {
             output_buf[count_copied++] = read_buf[read_buf_tail];
+            recv_chars -= 1;
             read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
         }
     }
@@ -182,7 +184,9 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
     // write indexes and receiver state back
     config->_internal.read_buf_tail = read_buf_tail;
     config->_internal.read_buf_head = read_buf_head;
-    config->_internal.recv_ch = recv_ch;
+    if(recv_chars == 0)
+        recv_ch = 0; // ensure correct channel if read everything
+    config->_internal.recv_ch = recv_ch; // if channel == 0 recv_ch might underflow => but is always ignored in that case
     config->_internal.recv_chars = recv_chars;
 
     return count_copied;

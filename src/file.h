@@ -41,6 +41,9 @@ namespace smux_client
     class basic_file
     {
         public:
+            /// class to signal an eof condition
+            class eof {};
+
             using fd_type = FD;
             using fd_set_type = FD_SET;
 
@@ -56,23 +59,22 @@ namespace smux_client
              * \brief                   read from the file
              * \param[out] buf          buffer to write the read data to
              * \param count             size of the buffer
-             * \param fd                file descriptor that signaled a read event
-             * \return                  actual number of read bytes (0 in case of EOF)
+             * \return                  actual number of read bytes
              * \throw                   system_error
+             * \throw                   eof
              *
              * Note: count can be 0. See select_lists() for details.
              */
-            virtual std::size_t read(void* buf, std::size_t count, fd_type const& fd) = 0;
+            virtual std::size_t read(void* buf, std::size_t count) = 0;
 
             /**
              * \brief                   write to the file
              * \param buf               buffer to write
              * \param count             size of buf
-             * \param fd                file descriptor that signaled a write event
              * \return                  actual number of written bytes
              * \throw                   system_error
              */
-            virtual std::size_t write(void* buf, std::size_t count, fd_type const& fd) = 0;
+            virtual std::size_t write(const void* buf, std::size_t count) = 0;
 
             /**
              * \brief                   handle exception
@@ -96,6 +98,8 @@ namespace smux_client
              * Note: The file descriptors in write_fds are only hooked up if there is data to be written.
              * However, file descriptors in read_fds are always monitored, but read() might be called with
              * count == 0 if a file is used for output only.
+             *
+             * Attention: No two different files may share a file descriptor in any of these sets.
              */
             virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) = 0;
 

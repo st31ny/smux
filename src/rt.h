@@ -2,10 +2,12 @@
 #ifndef _RT_H_INCLUDED_
 #define _RT_H_INCLUDED_
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
 #include <unordered_map>
+#include <sys/select.h>
 
 #include <smux.hpp>
 
@@ -23,17 +25,38 @@ namespace smux_client
     class runtime_system
     {
         public:
+            enum
+            {
+                RECEIVE_BUFFER_SIZE = 2048, ///< size of receive buffers in runtime_system
+                SMUX_BUFFER_SIZE = 4096, ///< size of buffers in smux
+            };
+
             /**
              * \brief                   ctor
              * \param master_in         file to read smux data from
              * \param master_out        file to write smux data to
-             *
-             * master_in can point to the same object as master_out
              */
-            runtime_system(std::shared_ptr<file> master_in, std::shared_ptr<file> master_out)
-                : _master_in(master_in)
-                , _master_out(master_out)
+            runtime_system(std::unique_ptr<file> master_in, std::unique_ptr<file> master_out)
+                : _smux(SMUX_BUFFER_SIZE)
             {
+                if(master_in)
+                    _master.in = std::make_shared<half_channel>(0, std::move(master_in));
+                if(master_out)
+                    _master.out = std::make_shared<half_channel>(0, std::move(master_out));
+            }
+
+            /**
+             * \brief                   ctor
+             * \param master            file to read/write smux data
+             */
+            runtime_system(std::unique_ptr<file> master)
+                : _smux(SMUX_BUFFER_SIZE)
+            {
+                if(master)
+                {
+                    _master.in = std::make_shared<half_channel>(0, std::move(master));
+                    _master.out = _master.in;
+                }
             }
 
             /**
@@ -44,12 +67,17 @@ namespace smux_client
              */
             void add_channel(smux_channel ch, std::unique_ptr<file> in, std::unique_ptr<file> out)
             {
-                auto half_channel_in = std::make_shared<half_channel>(ch, std::move(in));
-                auto half_channel_out = std::make_shared<half_channel>(ch, std::move(out));
-
-                auto channel = _channels[ch];
-                channel.in = half_channel_in;
-                channel.out = half_channel_out;
+                auto& channel = _channels[ch];
+                if(in)
+                {
+                    auto half_channel_in = std::make_shared<half_channel>(ch, std::move(in));
+                    channel.in = half_channel_in;
+                }
+                if(out)
+                {
+                    auto half_channel_out = std::make_shared<half_channel>(ch, std::move(out));
+                    channel.out = half_channel_out;
+                }
             }
 
             /**
@@ -59,11 +87,14 @@ namespace smux_client
              */
             void add_channel(smux_channel ch, std::unique_ptr<file> io)
             {
-                auto half_channel_io = std::make_shared<half_channel>(ch, std::move(io));
+                if(io)
+                {
+                    auto half_channel_io = std::make_shared<half_channel>(ch, std::move(io));
 
-                auto channel = _channels[ch];
-                channel.in = half_channel_io;
-                channel.out = half_channel_io;
+                    auto& channel = _channels[ch];
+                    channel.in = half_channel_io;
+                    channel.out = half_channel_io;
+                }
             }
 
             /**
@@ -78,25 +109,67 @@ namespace smux_client
 
         private:
             using buffer = std::vector<char>;
-            // one half of a channel (in or out)
+
+            /// sets of file descriptors for select()
+            struct fd_sets
+            {
+                struct __inner
+                {
+                    fd_set fs;
+                    int fd_max;
+
+                    __inner()
+                    {
+                        zero();
+                    }
+                    void zero()
+                    {
+                        FD_ZERO(&fs);
+                        fd_max = 0;
+                    }
+                    bool is_set(file_descriptor fd) const
+                    {
+                        return FD_ISSET(fd, &fs);
+                    }
+                    void clear(file_descriptor fd)
+                    {
+                        FD_CLR(fd, &fs);
+                    }
+                    void set(file_descriptor fd)
+                    {
+                        FD_SET(fd, &fs);
+                        fd_max = std::max(fd, fd_max);
+                    }
+                }
+                read, write, except;
+            };
+
+            /// file descriptors of a single file
+            struct file_fds
+            {
+                file_descriptor_set read, write, except;
+                bool mask_read = false, mask_write = true, mask_except = false;
+            };
+
+            /// one half of a channel (in or out)
             struct half_channel
             {
                 smux_channel const ch;
                 std::unique_ptr<file> const fl;
-                file_descriptor_set read_fds, write_fds, except_fds;
+                file_fds fds;
+                buffer out_buffer; // characters to be written soon
 
                 half_channel(smux_channel ch_, std::unique_ptr<file> fl_)
                     : ch(ch_)
-                    , fl(std::move(fl_))
+                      , fl(std::move(fl_))
                 {}
             };
 
-            // two half channels form a channel (in can be equal to out)
+            /// two half channels form a channel (in can be equal to out)
             struct channel
             {
                 std::shared_ptr<half_channel> in;
                 std::shared_ptr<half_channel> out;
-                buffer out_buffer; // characters to be written soon
             };
 
             // map with definitions of all channels
@@ -105,12 +178,29 @@ namespace smux_client
             using fd_map = std::unordered_map<file_descriptor, half_channel*>;
 
 
+            smux::connection _smux;
             // master file
-            std::shared_ptr<file> _master_in;
-            std::shared_ptr<file> _master_out;
-
+            channel _master;
             // all channels go here
             channel_map _channels;
+
+
+            /**
+             * \brief                   update a fd_map and fd_sets wrt. a single file
+             * \param hc                channel to re-query for file descriptors
+             * \param fs                fd_sets to update (or nullptr)
+             * \param fm                fd_map to update (or nullptr)
+             */
+            void _update_fds(half_channel& hc, fd_sets* fs = nullptr, fd_map* fm = nullptr);
+
+            // wrapper for function above taking care of calling it once or twice for channels with separate in/out
+            void _update_fds(channel& c, fd_sets* fs = nullptr, fd_map* fm = nullptr)
+            {
+                if(c.in)
+                    _update_fds(*c.in, fs, fm);
+                if(c.in != c.out && c.out)
+                    _update_fds(*c.out, fs, fm);
+            }
     };
 } // namespace smux_client
 

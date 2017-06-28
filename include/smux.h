@@ -46,6 +46,13 @@ extern "C" {
 /// identifiers of virtual channels
 typedef unsigned char smux_channel;
 
+enum
+{
+    smux_channel_default = 0,       ///< default channel in absense of channel escape sequences
+    smux_channel_min = 0,           ///< lowest valid channel
+    smux_channel_max = 0xFF,        ///< highest valid channel
+};
+
 /**
  * \brief                   function for writing multiplexed data
  * \param fd                pointer to user data (e.g., a file descriptor)

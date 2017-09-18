@@ -95,6 +95,7 @@ void runtime_system::run()
                             auto& hc_out = _channels[ch].out;
                             if(hc_out)
                             {
+                                buf.resize(ret); // remember correct size
                                 hc_out->out_buffer = std::move(buf);
                                 hc_out->fds.mask_write = false;
                                 _update_fds(*hc_out, &fs, &fm);

@@ -44,11 +44,13 @@ namespace smux_client
                 // TODO
             }
 
-            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) override
+            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds,
+                    fd_set_type& except_fds, bool data_present) override
             {
                 if(!_eof)
                     read_fds.insert(_fd);
-                write_fds.insert(_fd);
+                if(data_present)
+                   write_fds.insert(_fd);
                 (void)except_fds;
             }
 

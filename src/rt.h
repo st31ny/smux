@@ -148,7 +148,6 @@ namespace smux_client
             struct file_fds
             {
                 file_descriptor_set read, write, except;
-                bool mask_read = false, mask_write = true, mask_except = false;
             };
 
             /// one half of a channel (in or out)

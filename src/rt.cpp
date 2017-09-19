@@ -89,7 +89,6 @@ void runtime_system::run()
                                     out_buffer = std::move(buf);
                                 else
                                     out_buffer.insert(out_buffer.end(), buf.begin(), buf.end());
-                                hc_out->fds.mask_write = false;
                                 _update_fds(*hc_out);
                                 std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
                             }
@@ -132,11 +131,6 @@ void runtime_system::run()
                         auto begin = hc.out_buffer.begin();
                         hc.out_buffer.erase(begin, begin + ret);
                     }
-                    // buffer empty now? => mask fds
-                    if(hc.out_buffer.size() == 0)
-                    {
-                        hc.fds.mask_write = true;
-                    }
                 }
             }
 
@@ -157,10 +151,9 @@ void runtime_system::run()
 
 void runtime_system::_update_fds(half_channel& hc)
 {
+    // ask file for its file descriptors
     file_descriptor_set read_fds, write_fds, except_fds;
-
-    hc.fl->select_fds(read_fds, write_fds, except_fds);
-
+    hc.fl->select_fds(read_fds, write_fds, except_fds, hc.out_buffer.size() != 0);
 
     // remove all old file descriptors
     for(auto const& fds : {hc.fds.read, hc.fds.write, hc.fds.except})
@@ -180,22 +173,18 @@ void runtime_system::_update_fds(half_channel& hc)
     for(auto const& fd : read_fds)
     {
         _fm[fd] = &hc;
-        if(!hc.fds.mask_read)
-            _fs.read.set(fd);
+        _fs.read.set(fd);
     }
     for(auto const& fd : write_fds)
     {
         _fm[fd] = &hc;
-        if(!hc.fds.mask_write)
-            _fs.write.set(fd);
+        _fs.write.set(fd);
     }
     for(auto const& fd : except_fds)
     {
         _fm[fd] = &hc;
-        if(!hc.fds.mask_except)
-            _fs.except.set(fd);
+        _fs.except.set(fd);
     }
-
 
     // finally, remember the new sets
     hc.fds.read = std::move(read_fds);

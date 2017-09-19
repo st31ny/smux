@@ -68,17 +68,20 @@ namespace smux_client
              * \param[out] read_fds     file descriptors to monitor for reading
              * \param[out] write_fds    file descriptors to monitor for writing
              * \param[out] except_fds   file descriptors to monitor for exceptions
+             * \param data_present      true if data for writing is present
              *
              * When one of the events occurs, the appropriate handler is called. Then, this
              * function is called again in order to re-build the (potentially different) list
              * of file descriptors.
              *
              * The file is responsible to handle eof conditions correctly and to avoid unbounded
-             * signaling on eof.
+             * signaling on eof. File descriptors should only be set up for writing if actual data
+             * for writing is present.
              *
              * Attention: If two files share a file descriptor, only one handler is called.
              */
-            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) = 0;
+            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds,
+                    fd_set_type& except_fds, bool data_present) = 0;
 
             /**
              * \brief                   read from the file

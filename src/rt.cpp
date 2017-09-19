@@ -93,8 +93,12 @@ void runtime_system::run()
                             auto& hc_out = _channels[ch].out;
                             if(hc_out)
                             {
+                                auto& out_buffer = hc_out->out_buffer;
                                 buf.resize(ret); // remember correct size
-                                hc_out->out_buffer = std::move(buf);
+                                if(out_buffer.size() == 0) // no data waiting currently?
+                                    out_buffer = std::move(buf);
+                                else
+                                    out_buffer.insert(out_buffer.end(), buf.begin(), buf.end());
                                 hc_out->fds.mask_write = false;
                                 _update_fds(*hc_out);
                                 std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;

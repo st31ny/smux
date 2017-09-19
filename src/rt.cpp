@@ -8,8 +8,6 @@ using namespace smux_client;
 
 void runtime_system::run()
 {
-    fd_map fm;
-    fd_sets fs;
     buffer buf;
 
     // master files
@@ -34,22 +32,22 @@ void runtime_system::run()
         std::clog << "Warning: no master write file: cannot transmit data" << std::endl;
     }
 
-    // initially fill fm and fs
+    // initially fill _fm and _fs
     for(auto& channel : _channels)
     {
-        _update_fds(channel.second, &fs, &fm);
+        _update_fds(channel.second);
     }
     // hook up the master
-    _update_fds(_master, &fs, &fm);
+    _update_fds(_master);
 
     // main loop
     std::clog << "entering main loop" << std::endl;
     while(true)
     {
-        fd_sets fs_tmp = fs;
-        int nfds = std::max({fs.read.fd_max, fs.write.fd_max, fs.except.fd_max}) + 1;
+        fd_sets _fs_tmp = _fs;
+        int nfds = std::max({_fs.read.fd_max, _fs.write.fd_max, _fs.except.fd_max}) + 1;
         std::clog << "calling select()..." << std::endl;
-        int select_result = select(nfds, &fs_tmp.read.fs, &fs_tmp.write.fs, &fs_tmp.except.fs, nullptr);
+        int select_result = select(nfds, &_fs_tmp.read.fs, &_fs_tmp.write.fs, &_fs_tmp.except.fs, nullptr);
         std::clog << "called select()=" << select_result << std::endl;
         if(select_result < 0)
             throw system_error(errno);
@@ -57,13 +55,13 @@ void runtime_system::run()
         for(file_descriptor fd = 0; fd < nfds; ++fd)
         {
             // find our half channel associated with fd
-            auto fm_it = fm.find(fd);
-            if(fm_it == fm.end())
+            auto _fm_it = _fm.find(fd);
+            if(_fm_it == _fm.end())
                 continue;
-            auto& hc = *fm_it->second;
+            auto& hc = *_fm_it->second;
 
             // read event
-            if(fs_tmp.read.is_set(fd) && hc.fl->read_event(fd))
+            if(_fs_tmp.read.is_set(fd) && hc.fl->read_event(fd))
             {
                 if(&hc == master_in)
                 {
@@ -98,7 +96,7 @@ void runtime_system::run()
                                 buf.resize(ret); // remember correct size
                                 hc_out->out_buffer = std::move(buf);
                                 hc_out->fds.mask_write = false;
-                                _update_fds(*hc_out, &fs, &fm);
+                                _update_fds(*hc_out);
                                 std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
                             }
                         } else // channel not existing
@@ -131,11 +129,11 @@ void runtime_system::run()
                 }
 
                 // give file a chance to update its fd sets
-                _update_fds(hc, &fs, &fm);
+                _update_fds(hc);
             }
 
             // write event
-            if(fs_tmp.write.is_set(fd) && hc.fl->write_event(fd))
+            if(_fs_tmp.write.is_set(fd) && hc.fl->write_event(fd))
             {
                 if(&hc == master_out)
                 {
@@ -160,7 +158,7 @@ void runtime_system::run()
             }
 
             // exception
-            if(fs_tmp.except.is_set(fd))
+            if(_fs_tmp.except.is_set(fd))
             {
                 std::clog << "except event on " << fd << std::endl;
 
@@ -169,62 +167,52 @@ void runtime_system::run()
             }
 
             // give the file a chance to update its fd sets
-            _update_fds(hc, &fs, &fm);
+            _update_fds(hc);
         }
     }
 }
 
-void runtime_system::_update_fds(half_channel& hc, fd_sets* fs, fd_map* fm)
+void runtime_system::_update_fds(half_channel& hc)
 {
     file_descriptor_set read_fds, write_fds, except_fds;
 
     hc.fl->select_fds(read_fds, write_fds, except_fds);
 
-    // only continue to update fm/fs if not both are nullptr
-    if(fm || fs)
+
+    // remove all old file descriptors
+    for(auto const& fds : {hc.fds.read, hc.fds.write, hc.fds.except})
     {
-        // remove all old file descriptors
-        for(auto const& fds : {hc.fds.read, hc.fds.write, hc.fds.except})
+        for(auto const& fd : fds)
         {
-            for(auto const& fd : fds)
-            {
-                if(fm)
-                    fm->erase(fd);
+            _fm.erase(fd);
 
-                if(fs)
-                {
-                    // we assume that a fd uniquely belongs to a single file
-                    fs->read.clear(fd);
-                    fs->write.clear(fd);
-                    fs->except.clear(fd);
-                }
-            }
+            // we assume that a fd uniquely belongs to a single file
+            _fs.read.clear(fd);
+            _fs.write.clear(fd);
+            _fs.except.clear(fd);
         }
-
-        // add the new definitions
-        for(auto const& fd : read_fds)
-        {
-            if(fm)
-                (*fm)[fd] = &hc;
-            if(fs && !hc.fds.mask_read)
-                fs->read.set(fd);
-        }
-        for(auto const& fd : write_fds)
-        {
-            if(fm)
-                (*fm)[fd] = &hc;
-            if(fs && !hc.fds.mask_write)
-                fs->write.set(fd);
-        }
-        for(auto const& fd : except_fds)
-        {
-            if(fm)
-                (*fm)[fd] = &hc;
-            if(fs && !hc.fds.mask_except)
-                fs->except.set(fd);
-        }
-
     }
+
+    // add the new definitions
+    for(auto const& fd : read_fds)
+    {
+        _fm[fd] = &hc;
+        if(!hc.fds.mask_read)
+            _fs.read.set(fd);
+    }
+    for(auto const& fd : write_fds)
+    {
+        _fm[fd] = &hc;
+        if(!hc.fds.mask_write)
+            _fs.write.set(fd);
+    }
+    for(auto const& fd : except_fds)
+    {
+        _fm[fd] = &hc;
+        if(!hc.fds.mask_except)
+            _fs.except.set(fd);
+    }
+
 
     // finally, remember the new sets
     hc.fds.read = std::move(read_fds);

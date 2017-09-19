@@ -177,29 +177,31 @@ namespace smux_client
             // lookup map to fastly find a half_channel on a select event
             using fd_map = std::unordered_map<file_descriptor, half_channel*>;
 
-
+            // (de)muxer
             smux::connection _smux;
             // master file
             channel _master;
             // all channels go here
             channel_map _channels;
+            // map of all file descriptors to their half channels
+            fd_map _fm;
+            // file descritor sets for select()
+            fd_sets _fs;
 
 
             /**
              * \brief                   update a fd_map and fd_sets wrt. a single file
              * \param hc                channel to re-query for file descriptors
-             * \param fs                fd_sets to update (or nullptr)
-             * \param fm                fd_map to update (or nullptr)
              */
-            void _update_fds(half_channel& hc, fd_sets* fs = nullptr, fd_map* fm = nullptr);
+            void _update_fds(half_channel& hc);
 
             // wrapper for function above taking care of calling it once or twice for channels with separate in/out
-            void _update_fds(channel& c, fd_sets* fs = nullptr, fd_map* fm = nullptr)
+            void _update_fds(channel& c)
             {
                 if(c.in)
-                    _update_fds(*c.in, fs, fm);
+                    _update_fds(*c.in);
                 if(c.in != c.out && c.out)
-                    _update_fds(*c.out, fs, fm);
+                    _update_fds(*c.out);
             }
     };
 } // namespace smux_client

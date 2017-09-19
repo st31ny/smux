@@ -63,7 +63,7 @@ void runtime_system::run()
             auto& hc = *fm_it->second;
 
             // read event
-            if(fs_tmp.read.is_set(fd))
+            if(fs_tmp.read.is_set(fd) && hc.fl->read_event(fd))
             {
                 if(&hc == master_in)
                 {
@@ -135,7 +135,7 @@ void runtime_system::run()
             }
 
             // write event
-            if(fs_tmp.write.is_set(fd))
+            if(fs_tmp.write.is_set(fd) && hc.fl->write_event(fd))
             {
                 if(&hc == master_out)
                 {
@@ -165,7 +165,7 @@ void runtime_system::run()
                 std::clog << "except event on " << fd << std::endl;
 
                 // call exception handler
-                hc.fl->exception(fd);
+                hc.fl->exception_event(fd);
             }
 
             // give the file a chance to update its fd sets

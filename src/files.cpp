@@ -21,10 +21,33 @@ namespace smux_client
     class simple_file : public file
     {
         public:
-            simple_file(file_mode m)
-                : file(m)
-                , _fd(-1)
+            simple_file()
+                : _fd(-1)
             {
+            }
+
+            virtual bool read_event(fd_type const&) override
+            {
+                // select() signaled readiness for reading -> reading always possible
+                return true;
+            }
+
+            virtual bool write_event(fd_type const&) override
+            {
+                // select() signaled readiness for writing -> writing always possible
+                return true;
+            }
+
+            virtual void exception_event(fd_type const&) override
+            {
+                // TODO
+            }
+
+            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) override
+            {
+                read_fds.insert(_fd);
+                write_fds.insert(_fd);
+                (void)except_fds;
             }
 
             virtual std::size_t read(void* buf, std::size_t count) override
@@ -45,18 +68,6 @@ namespace smux_client
                 return static_cast<std::size_t>(ret);
             }
 
-            virtual void exception(fd_type const&) override
-            {
-                // TODO
-            }
-
-            virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) override
-            {
-                read_fds.insert(_fd);
-                write_fds.insert(_fd);
-                (void)except_fds;
-            }
-
             virtual ~simple_file()
             {
                 if(_fd >= 0)
@@ -72,7 +83,6 @@ namespace smux_client
     {
         public:
             regular_file(file_type const&, file_mode m, file_args const& args)
-                : simple_file(m)
             {
                 int flags = 0;
 
@@ -112,7 +122,6 @@ namespace smux_client
     {
         public:
             stdin_file(file_type const&, file_mode m, file_args const& args)
-                : simple_file(m)
             {
                 if(m != file_mode::in)
                     throw config_error("you can only read from stdin");
@@ -129,7 +138,6 @@ namespace smux_client
     {
         public:
             stdout_file(file_type const&, file_mode m, file_args const& args)
-                : simple_file(m)
             {
                 if(m != file_mode::out)
                     throw config_error("you can only write to stdout");

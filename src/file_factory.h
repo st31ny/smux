@@ -14,6 +14,16 @@
 
 namespace smux_client
 {
+    /**
+     * \brief                   read/write mode for files
+     */
+    enum class file_mode : int
+    {
+        in  = 4, ///< open file for reading
+        out = 2, ///< open file for writing
+        io  = 6, ///< open file for reading and writing
+    };
+
     /// argument list for file creation
     using file_args = std::vector<std::string>;
     /// type name of files

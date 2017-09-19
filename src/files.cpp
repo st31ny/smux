@@ -23,6 +23,7 @@ namespace smux_client
         public:
             simple_file()
                 : _fd(-1)
+                , _eof(false)
             {
             }
 
@@ -45,7 +46,8 @@ namespace smux_client
 
             virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) override
             {
-                read_fds.insert(_fd);
+                if(!_eof)
+                    read_fds.insert(_fd);
                 write_fds.insert(_fd);
                 (void)except_fds;
             }
@@ -55,8 +57,8 @@ namespace smux_client
                 auto ret = ::read(_fd, buf, count);
                 if(ret < 0)
                     throw system_error(errno);
-                if(ret == 0) // eof
-                    throw eof();
+                if(ret == 0) // eof -> avoid further read events
+                    _eof = true;
                 return static_cast<std::size_t>(ret);
             }
 
@@ -76,6 +78,7 @@ namespace smux_client
             }
         protected:
             int _fd;
+            bool _eof;
     };
 
     // simple file for reading/writing

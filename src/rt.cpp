@@ -66,24 +66,14 @@ void runtime_system::run()
                 if(&hc == master_in)
                 {
                     std::clog << "master read event" << std::endl;
+                    if(_smux.read() < 0)
+                        throw system_error("reading into smux buffer failed");
+                    std::clog << "_smux.read() done" << std::endl;
 
-                    std::size_t ret = 0;
+                    // receive data
                     smux_channel ch;
-                    try
-                    {
-                        if(_smux.read() < 0)
-                            throw system_error("reading into smux buffer failed");
-
-                        std::clog << "_smux.read() done" << std::endl;
-
-                        buf.resize(RECEIVE_BUFFER_SIZE);
-                        ret = _smux.recv(&ch, buf.data(), buf.size());
-                    } catch(file::eof&)
-                    {
-                        std::clog << "eof on master file" << std::endl;
-                        // avoid further reading
-                        master_in->fds.mask_read = true;
-                    }
+                    buf.resize(RECEIVE_BUFFER_SIZE);
+                    std::size_t ret = _smux.recv(&ch, buf.data(), buf.size());
 
                     // forward data to the correct output
                     if(ret > 0)
@@ -113,27 +103,16 @@ void runtime_system::run()
                     // a channel is ready to be read
                     std::clog << "read event on channel " << static_cast<int>(hc.ch) << ", fd=" << fd << std::endl;
                     buf.resize(RECEIVE_BUFFER_SIZE);
-                    try
+
+                    std::size_t ret = hc.fl->read(buf.data(), buf.size());
+                    if(ret > 0)
                     {
-                        std::size_t ret = hc.fl->read(buf.data(), buf.size());
-                        if(ret > 0)
-                        {
-                            // forward data to smux
-                            smux::ostream out(_smux, hc.ch);
-                            out.write(buf.data(), ret);
-                            out.flush();
-                        }
-                    } catch(file::eof&)
-                    {
-                        std::clog << "eof on channel " << static_cast<int>(hc.ch) << std::endl;
-                        // avoid further reading
-                        hc.fds.mask_read = true;
+                        // forward data to smux
+                        smux::ostream out(_smux, hc.ch);
+                        out.write(buf.data(), ret);
+                        out.flush();
                     }
-
                 }
-
-                // give file a chance to update its fd sets
-                _update_fds(hc);
             }
 
             // write event

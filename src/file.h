@@ -35,9 +35,6 @@ namespace smux_client
     class basic_file
     {
         public:
-            /// class to signal an eof condition
-            class eof {};
-
             using fd_type = FD;
             using fd_set_type = FD_SET;
 
@@ -76,6 +73,9 @@ namespace smux_client
              * function is called again in order to re-build the (potentially different) list
              * of file descriptors.
              *
+             * The file is responsible to handle eof conditions correctly and to avoid unbounded
+             * signaling on eof.
+             *
              * Attention: If two files share a file descriptor, only one handler is called.
              */
             virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds, fd_set_type& except_fds) = 0;
@@ -86,7 +86,6 @@ namespace smux_client
              * \param count             size of the buffer
              * \return                  actual number of read bytes
              * \throw                   system_error
-             * \throw                   eof
              */
             virtual std::size_t read(void* buf, std::size_t count) = 0;
 

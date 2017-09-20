@@ -58,6 +58,24 @@ namespace smux_client
              */
             using channel_map = std::map<smux_channel, channel>;
 
+            /**
+             * \brief                   get the master file definition
+             * \return                  channel representing the master file
+             */
+            channel const& master() const
+            {
+                return _master_file;
+            }
+
+            /**
+             * \brief                   get the channel map
+             * \return                  channel map
+             */
+            channel_map const& channels() const
+            {
+                return _channels;
+            }
+
         protected:
             /**
              * \brief                   define the master file symmetrically

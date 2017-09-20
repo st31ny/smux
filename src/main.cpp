@@ -8,8 +8,91 @@
 
 #include "file_factory.h"
 #include "rt.h"
+#include "cnf_argv.h"
+
+using namespace smux_client;
+
+void print_file(std::ostream& os, cnf::file_def const& fd)
+{
+    os << fd.type << ":";
+    switch(fd.mode)
+    {
+        case file_mode::io:
+            os << "io"; break;
+        case file_mode::in:
+            os << "in"; break;
+        case  file_mode::out:
+            os << "out"; break;
+        default:
+            os << "unk"; break;
+    }
+    os << ":";
+    for(auto const& arg : fd.args)
+    {
+        os << arg << ":";
+    }
+}
+
+void print_channel(std::ostream& os, cnf::channel const& ch)
+{
+    switch(ch.type)
+    {
+        case channel_type::none:
+            os << "n"; break;
+        case channel_type::separate:
+            os << "s"; break;
+        case channel_type::read_only:
+            os << "r"; break;
+        case channel_type::write_only:
+            os << "w"; break;
+        case channel_type::symmetric:
+            os << "y"; break;
+        default:
+            os << "u"; break;
+    }
+    os << "{";
+    if(ch.io)
+    {
+        os << "<io:";
+        print_file(os, *ch.io);
+        os << ">";
+    }
+    if(ch.in)
+    {
+        os << "<in:";
+        print_file(os, *ch.in);
+        os << ">";
+    }
+    if(ch.out)
+    {
+        os << "<out:";
+        print_file(os, *ch.out);
+        os << ">";
+    }
+    os << "}";
+}
 
 int main(int argc, const char* argv[])
+{
+    std::unique_ptr<smux_client::cnf_argv> conf(new smux_client::cnf_argv);
+    conf->parse(argc, argv);
+    std::cout << "parsed config options:\n"
+        << "\nhelp lvl: " << conf->help_level()
+        << "\ndebug lvl: " << conf->debug_level()
+        << "\nmaster file: ";
+    print_channel(std::cout, conf->master());
+    std::cout << "\n";
+    std::cout << "channels:\n";
+    for(auto const& ch : conf->channels())
+    {
+        std::cout << " " << static_cast<unsigned>(ch.first) << " ";
+        print_channel(std::cout, ch.second);
+    std::cout << "\n";
+    }
+    return 0;
+}
+
+int main_testsmux(int argc, const char* argv[])
 {
     using namespace smux_client;
     auto fac = file_factory::get();

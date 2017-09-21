@@ -41,13 +41,12 @@ namespace smux_client
 
     /**
      * \brief                   file factory function type
-     * \param type              type name of the requested function
-     * \param m                 file mode
-     * \param args              the list of arguments for this file
+     * \param fl_def            file definition
+     * \return                  newly created file
      * \throw                   config_error (arguments invalid)
      * \throw                   system_error (problem allocating resources)
      */
-    using file_factory_fn = std::unique_ptr<file> (file_type const& type, file_mode m, file_args const& args);
+    using file_factory_fn = std::unique_ptr<file> (file_def const& fl_def);
 
     /**
      * \brief                   registry for file types
@@ -77,25 +76,13 @@ namespace smux_client
 
             /**
              * \brief                   create a file
-             * \param type              name of the file type
-             * \param m                 mode for opening (ro, wo, rw)
-             * \param args              arguments for the file type factory function
-             * \see                     file_factory_fn
-             */
-            std::unique_ptr<file> create(file_type const& type, file_mode m, file_args const& args)
-            {
-                return _registry.at(type)(type, m, args);
-            }
-
-            /**
-             * \brief                   create a file
              * \param def               definition structure
              * \return                  newly created file
              * \see                     file_factory_fn
              */
             std::unique_ptr<file> create(file_def const& def)
             {
-                return create(def.type, def.mode, def.args);
+                return _registry.at(def.type)(def);
             }
 
         private:
@@ -127,9 +114,9 @@ namespace smux_client
              * \brief                   factory function to actually create a file
              */
             static
-            std::unique_ptr<file> create(file_type const& type, file_mode m, file_args const& args)
+            std::unique_ptr<file> create(file_def const& fl_def)
             {
-                return std::unique_ptr<file>(new file_t(type, m, args));
+                return std::unique_ptr<file>(new file_t(fl_def));
             }
     };
 

@@ -98,14 +98,15 @@ namespace smux_client
     class regular_file : public simple_file
     {
         public:
-            regular_file(file_type const&, file_mode m, file_args const& args)
+            regular_file(file_def const& fl_def)
             {
                 int flags = 0;
+                auto& args = fl_def.args;
 
                 // parse arguments
                 assert_config(args.size() >= 1, "one argument required");
                 assert_config(args.size() <= 2, "only two arguments supported");
-                switch(m)
+                switch(fl_def.mode)
                 {
                     case file_mode::io:
                         flags = O_RDWR | O_CREAT; break;
@@ -139,12 +140,12 @@ namespace smux_client
     class stdio_file : public simple_file
     {
         public:
-            stdio_file(file_type const&, file_mode m, file_args const& args)
+            stdio_file(file_def const& fl_def)
             {
-                assert_config(args.size() == 0, "no arguments supported");
+                assert_config(fl_def.args.size() == 0, "no arguments supported");
 
-                bool fstdin = m != file_mode::out;
-                bool fstdout = m != file_mode::in;
+                bool fstdin = fl_def.mode != file_mode::out;
+                bool fstdout = fl_def.mode != file_mode::in;
                 if(fstdin)
                 {
                     _fdr = dup(STDIN_FILENO);

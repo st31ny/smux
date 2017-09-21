@@ -31,15 +31,6 @@ namespace smux_client
     class cnf
     {
         public:
-            /**
-             * \brief                   parameters for a file
-             */
-            struct file_def
-            {
-                file_type type; ///< file type
-                file_mode mode; ///< open mode of the file
-                file_args args; ///< arguments for file creation
-            };
 
             /**
              * \brief                   definition of a channel

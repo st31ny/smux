@@ -11,7 +11,7 @@ using namespace smux_client;
  * \param[out] fl_def       file definiton
  * \return                  true if successful
  */
-static bool parse_file_spec(std::string const& spec, cnf::file_def& fl_def);
+static bool parse_file_spec(std::string const& spec, file_def& fl_def);
 
 /**
  * \brief                   parse a channel specification (channel id, channel type, file spec)
@@ -20,7 +20,7 @@ static bool parse_file_spec(std::string const& spec, cnf::file_def& fl_def);
  * \param[out] fl_def       file definition
  * \return                  true if successful
  */
-static bool parse_channel_spec(std::string const& spec, smux_channel& ch, cnf::file_def& fl_def);
+static bool parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& fl_def);
 
 void cnf_argv::parse(int argc, char const* argv[])
 {
@@ -53,7 +53,7 @@ void cnf_argv::parse(int argc, char const* argv[])
                             throw config_error("--master requieres an argument");
                         std::string arg(argv[++i]);
                         // parse file definition
-                        std::unique_ptr<cnf::file_def> fl_def(new cnf::file_def);
+                        std::unique_ptr<file_def> fl_def(new file_def);
                         if(!parse_file_spec(arg, *fl_def))
                             throw config_error(std::string("unable to parse master file specification: ") + arg);
                         // add master file spec
@@ -88,7 +88,7 @@ void cnf_argv::parse(int argc, char const* argv[])
         } else // positional argument == channel definiton
         {
             std::string arg(argv[i]);
-            std::unique_ptr<cnf::file_def> fl_def(new cnf::file_def);
+            std::unique_ptr<file_def> fl_def(new file_def);
             smux_channel ch;
             if(!parse_channel_spec(arg, ch, *fl_def))
                 throw config_error(std::string("unable to parse channel specification: ") + arg);
@@ -103,7 +103,7 @@ void cnf_argv::parse(int argc, char const* argv[])
     }
 }
 
-static bool parse_channel_spec(std::string const& spec, smux_channel& ch, cnf::file_def& fl_def)
+static bool parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& fl_def)
 {
     // string up to the first : contains the channel number
     auto delim = spec.find(':');
@@ -128,7 +128,7 @@ static bool parse_channel_spec(std::string const& spec, smux_channel& ch, cnf::f
     return parse_file_spec(spec.substr(delim + 1), fl_def);
 }
 
-static bool parse_file_spec(std::string const& spec, cnf::file_def& fl_def)
+static bool parse_file_spec(std::string const& spec, file_def& fl_def)
 {
     std::string const delim(":");
 

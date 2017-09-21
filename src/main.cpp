@@ -10,10 +10,83 @@
 #include "rt.h"
 #include "cnf_argv.h"
 
-using namespace smux_client;
+void print_config(std::ostream& os, smux_client::cnf const& conf);
 
-void print_file(std::ostream& os, cnf::file_def const& fd)
+/**
+ * \brief                   create and configure the runtime system
+ * \param conf              channel configuration
+ * \return                  ready runtime system
+ * \throw config_error
+ * \throw system_error
+ */
+static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf const& conf);
+
+int main(int argc, const char* argv[])
 {
+    using namespace smux_client;
+
+    // parse config
+    std::unique_ptr<cnf_argv> conf(new cnf_argv);
+    conf->parse(argc, argv);
+    print_config(std::clog, *conf);
+
+    // create/configure the runtime system
+    auto rt = load_rt(*conf);
+
+    // pass control to the rt
+    rt->run();
+
+    return 0;
+}
+
+static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf const& conf)
+{
+    using namespace smux_client;
+
+    // create runtime enviroment
+    auto fac = file_factory::get();
+    std::unique_ptr<runtime_system> rt;
+    std::unique_ptr<file> io, in, out;
+    if(conf.master().io) // symmetric master file
+    {
+        io = fac->create(*conf.master().io);
+        rt.reset(new runtime_system(std::move(io)));
+    } else // asymmetric
+    {
+        if(conf.master().in)
+            in = fac->create(*conf.master().in);
+        if(conf.master().out)
+            out = fac->create(*conf.master().out);
+        if(in || out)
+            rt.reset(new runtime_system(std::move(in), std::move(out)));
+        else // neither master in nor master out defined... what are we doing here?
+            throw config_error("master file definition required");
+    }
+
+    // create/add all files
+    for(auto const& fl_def : conf.channels())
+    {
+        if(fl_def.second.io) // symmetric file
+        {
+            io = fac->create(*fl_def.second.io);
+            rt->add_channel(fl_def.first, std::move(io));
+        } else
+        {
+            if(fl_def.second.in)
+                in = fac->create(*fl_def.second.in);
+            if(fl_def.second.out)
+                out = fac->create(*fl_def.second.out);
+            if(in || out)
+                rt->add_channel(fl_def.first, std::move(in), std::move(out));
+        }
+    }
+
+    return rt;
+}
+
+void print_file(std::ostream& os, smux_client::file_def const& fd)
+{
+    using namespace smux_client;
     os << fd.type << ":";
     switch(fd.mode)
     {
@@ -33,8 +106,9 @@ void print_file(std::ostream& os, cnf::file_def const& fd)
     }
 }
 
-void print_channel(std::ostream& os, cnf::channel const& ch)
+void print_channel(std::ostream& os, smux_client::cnf::channel const& ch)
 {
+    using namespace smux_client;
     switch(ch.type)
     {
         case channel_type::none:
@@ -72,24 +146,17 @@ void print_channel(std::ostream& os, cnf::channel const& ch)
     os << "}";
 }
 
-int main(int argc, const char* argv[])
+void print_config(std::ostream& os, smux_client::cnf const& conf)
 {
-    std::unique_ptr<smux_client::cnf_argv> conf(new smux_client::cnf_argv);
-    conf->parse(argc, argv);
-    std::cout << "parsed config options:\n"
-        << "\nhelp lvl: " << conf->help_level()
-        << "\ndebug lvl: " << conf->debug_level()
-        << "\nmaster file: ";
-    print_channel(std::cout, conf->master());
-    std::cout << "\n";
-    std::cout << "channels:\n";
-    for(auto const& ch : conf->channels())
+    os << "master: ";
+    print_channel(os, conf.master());
+    os << "\n" << "channels:\n";
+    for(auto const& ch : conf.channels())
     {
-        std::cout << " " << static_cast<unsigned>(ch.first) << " ";
-        print_channel(std::cout, ch.second);
-    std::cout << "\n";
+        os << " " << static_cast<unsigned>(ch.first) << " ";
+        print_channel(os, ch.second);
+    os << "\n";
     }
-    return 0;
 }
 
 int main_testsmux(int argc, const char* argv[])

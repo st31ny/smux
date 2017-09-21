@@ -30,6 +30,16 @@ namespace smux_client
     using file_type = std::string;
 
     /**
+     * \brief                   parameters for a file
+     */
+    struct file_def
+    {
+        file_type type; ///< file type
+        file_mode mode; ///< open mode of the file
+        file_args args; ///< arguments for file creation
+    };
+
+    /**
      * \brief                   file factory function type
      * \param type              type name of the requested function
      * \param m                 file mode
@@ -75,6 +85,17 @@ namespace smux_client
             std::unique_ptr<file> create(file_type const& type, file_mode m, file_args const& args)
             {
                 return _registry.at(type)(type, m, args);
+            }
+
+            /**
+             * \brief                   create a file
+             * \param def               definition structure
+             * \return                  newly created file
+             * \see                     file_factory_fn
+             */
+            std::unique_ptr<file> create(file_def const& def)
+            {
+                return create(def.type, def.mode, def.args);
             }
 
         private:

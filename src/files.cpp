@@ -16,13 +16,19 @@ namespace smux_client
             throw config_error(msg);
     }
 
-    // base class for files with one file descriptor
-
+    /**
+     * \brief                   base class for files with one file descriptor for reading and
+     *                          another one for writing
+     *
+     * Derived classes can simply overwrite _fdr and _fdw. Using the same file descriptor reading/
+     * writing or only one of the two is acceptable.
+     */
     class simple_file : public file
     {
         public:
             simple_file()
-                : _fd(-1)
+                : _fdr(fd_nil)
+                , _fdw(fd_nil)
                 , _eof(false)
             {
             }
@@ -41,22 +47,23 @@ namespace smux_client
 
             virtual void exception_event(fd_type const&) override
             {
-                // TODO
             }
 
             virtual void select_fds(fd_set_type& read_fds, fd_set_type& write_fds,
                     fd_set_type& except_fds, bool data_present) override
             {
-                if(!_eof)
-                    read_fds.insert(_fd);
-                if(data_present)
-                   write_fds.insert(_fd);
+                if(!_eof && _fdr != fd_nil)
+                    read_fds.insert(_fdr);
+                if(data_present && _fdw != fd_nil)
+                   write_fds.insert(_fdw);
                 (void)except_fds;
             }
 
             virtual std::size_t read(void* buf, std::size_t count) override
             {
-                auto ret = ::read(_fd, buf, count);
+                if(_fdr == fd_nil)
+                    return 0;
+                auto ret = ::read(_fdr, buf, count);
                 if(ret < 0)
                     throw system_error(errno);
                 if(ret == 0) // eof -> avoid further read events
@@ -66,7 +73,9 @@ namespace smux_client
 
             virtual std::size_t write(const void* buf, std::size_t count) override
             {
-                auto ret = ::write(_fd, buf, count);
+                if(_fdw == fd_nil)
+                    return 0;
+                auto ret = ::write(_fdw, buf, count);
                 if(ret < 0)
                     throw system_error(errno);
                 return static_cast<std::size_t>(ret);
@@ -74,12 +83,14 @@ namespace smux_client
 
             virtual ~simple_file()
             {
-                if(_fd >= 0)
-                    close(_fd);
+                if(_fdr != fd_nil)
+                    close(_fdr);
+                if(_fdw != _fdr && _fdw != fd_nil)
+                    close(_fdw);
                 // ignore errors (do not throw in dtors)
             }
         protected:
-            int _fd;
+            int _fdr, _fdw;
             bool _eof;
     };
 
@@ -116,48 +127,42 @@ namespace smux_client
                 }
 
                 // open file
-                _fd = open(args[0].c_str(), flags, 0666);
-                if(_fd == -1)
+                fd_type fd = open(args[0].c_str(), flags, 0666);
+                if(fd == -1)
                     throw system_error(errno);
+                _fdr = fd;
+                _fdw = fd;
             }
     };
 
-    // stdin
-    class stdin_file : public simple_file
+    // stdio
+    class stdio_file : public simple_file
     {
         public:
-            stdin_file(file_type const&, file_mode m, file_args const& args)
+            stdio_file(file_type const&, file_mode m, file_args const& args)
             {
-                if(m != file_mode::in)
-                    throw config_error("you can only read from stdin");
                 assert_config(args.size() == 0, "no arguments supported");
-                // duplicate the fd as it is closed in the dtor
-                _fd = dup(STDIN_FILENO);
-                if(_fd == -1)
-                    throw system_error(errno);
-            }
-    };
 
-    // stdout
-    class stdout_file : public simple_file
-    {
-        public:
-            stdout_file(file_type const&, file_mode m, file_args const& args)
-            {
-                if(m != file_mode::out)
-                    throw config_error("you can only write to stdout");
-                assert_config(args.size() == 0, "no arguments supported");
-                // duplicate the fd here, too
-                _fd = dup(STDOUT_FILENO);
-                if(_fd == -1)
-                    throw system_error(errno);
+                bool fstdin = m != file_mode::out;
+                bool fstdout = m != file_mode::in;
+                if(fstdin)
+                {
+                    _fdr = dup(STDIN_FILENO);
+                    if(_fdr == -1)
+                        throw system_error(errno);
+                }
+                if(fstdout)
+                {
+                    _fdw = dup(STDOUT_FILENO);
+                    if(_fdw == -1)
+                        throw system_error(errno);
+                }
             }
     };
 
     // register file types
     static register_file_type<regular_file> regular_file_registrar("file");
-    static register_file_type<stdin_file> stdin_file_registrar("stdin");
-    static register_file_type<stdout_file> stdout_file_registrar("stdout");
+    static register_file_type<stdio_file> stdin_file_registrar("stdio");
 
 
 } // smux_client

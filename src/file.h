@@ -14,6 +14,9 @@ namespace smux_client
      * \brief                   type for file descriptors
      */
     using file_descriptor = int;
+    enum {
+        fd_nil = -1 ///< invalid file descriptor value
+    };
 
     /**
      * \brief                   type for sets of file descriptors

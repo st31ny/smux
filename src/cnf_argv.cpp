@@ -148,9 +148,13 @@ static bool parse_file_spec(std::string const& spec, file_def& fl_def)
 
     // next, we expect the file type (between the first : and the second :)
     auto delim_type = spec.find(delim, delim_mode + delim.length());
-    if(delim_type == std::string::npos)
-        return false;
+    if(delim_type == std::string::npos) // no arguments
+        delim_type = spec.length();
     fl_def.type = spec.substr(delim_mode + delim.length(), delim_type - delim_mode - delim.length());
+
+    // if there are no arguments, stop here
+    if(delim_type >= spec.length())
+        return true;
 
     // finally, split arguments at the remaining :
     auto arg_start = delim_type + delim.length();

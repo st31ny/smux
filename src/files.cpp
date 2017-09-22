@@ -2,11 +2,18 @@
 #include "file.h"
 #include "file_factory.h"
 
+#include <sstream>
+#include <vector>
+
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <stdio.h> // for perror
+#include <stdlib.h> // for exit
 
 namespace smux_client
 {
@@ -128,6 +135,7 @@ namespace smux_client
                 }
 
                 // open file
+                flags |= O_CLOEXEC;
                 fd_type fd = open(args[0].c_str(), flags, 0666);
                 if(fd == -1)
                     throw system_error(errno);
@@ -161,9 +169,143 @@ namespace smux_client
             }
     };
 
+    /**
+     * \brief                   base class for exec
+     *
+     * start other program & use a socketpair for communication
+     */
+    class exec_base : public simple_file
+    {
+        public:
+            exec_base()
+            {}
+
+        protected:
+            /**
+             * \brief                   fork and exec
+             * \param path              program name or path
+             * \param args              program arguments
+             * \param mode              communication mode
+             * \throw system_error
+             */
+            void init(std::string const& path, std::vector<std::string> const& args, file_mode mode);
+    };
+
+    // simple program execution
+    class exec : public exec_base
+    {
+        public:
+            exec(file_def const& fl_def)
+            {
+                // split argument at spaces
+                std::vector<std::string> args;
+                std::string path;
+                std::string tmp;
+                std::istringstream is(fl_def.arg_string);
+                is >> path;
+                while(is >> tmp)
+                    args.push_back(std::move(tmp));
+                if(path.empty())
+                    throw config_error("program path required");
+
+                // execute the sub process
+                init(path, args, fl_def.mode);
+            }
+    };
+
     // register file types
     static register_file_type<regular_file> regular_file_registrar("file");
     static register_file_type<stdio_file> stdin_file_registrar("stdio");
+    static register_file_type<exec> exec_registrar("exec");
 
+    // implementation
+    void exec_base::init(std::string const& path, std::vector<std::string> const& args, file_mode mode)
+    {
+        // init argument list
+        char const* argv[args.size() + 2]; // space for program name + arguments + NULL
+        argv[0] = path.c_str();
+        unsigned i = 1;
+        for(auto& arg : args)
+        {
+            argv[i++] = arg.c_str();
+        }
+        argv[i] = nullptr;
+
+        // init communication
+        int sv[2]; // [0]..parent side, [1]..child side
+        if(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv) != 0)
+            throw system_error(errno);
+        int fd_parent = sv[0];
+        int fd_chld = sv[1];
+
+        // fork + exec
+        pid_t pid = fork();
+        if(pid == 0)
+        { // child
+            int err = 0;
+
+            // close parent side
+            close(fd_parent);
+
+            // temporarily remember stderr (to reopen after daemon)
+            int stderr_tmp = dup(STDERR_FILENO);
+            if(stderr_tmp == -1)
+                exit(EXIT_FAILURE);
+            // daemonize, close stdin/stdout/stderr, keep wdir
+            err = daemon(1, 0);
+            if(err)
+                exit(EXIT_FAILURE);
+            // restore stderr
+            if(dup2(stderr_tmp, STDERR_FILENO) == -1)
+                perror("restoring stderr for child process failed");
+            close(stderr_tmp);
+
+            // reopen stdin and stdout according to mode
+            if(mode != file_mode::out) // we want to have stdin
+            {
+                if(dup2(fd_chld, STDIN_FILENO) == -1)
+                {
+                    perror("establishing child communication failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            if(mode != file_mode::in) // we want to have stdout
+            {
+                if(dup2(fd_chld, STDOUT_FILENO) == -1)
+                {
+                    perror("establishing child communication failed");
+                    exit(EXIT_FAILURE);
+                }
+            }
+
+            // child side has been dupped (not needed anymore)
+            close(fd_chld);
+
+            // execute the program
+            execvp(path.c_str(), (char* const*)argv);
+
+            // if we reach this point, there was an error
+            exit(EXIT_FAILURE);
+        } else if(pid > 0)
+        { // parent
+            // close child side of communication and remember parent side
+            close(fd_chld);
+            if(mode != file_mode::out)
+                _fdr = fd_parent;
+            if(mode != file_mode::in)
+                _fdw = fd_parent;
+
+            int result;
+            if(waitpid(pid, &result, 0) == -1)
+                throw system_error(errno);
+
+            if((WIFEXITED(result) && WEXITSTATUS(result) != 0) || WIFSIGNALED(result))
+                throw system_error("child process terminated with error");
+        } else
+        {
+            // error
+            throw system_error("forking failed");
+        }
+    }
 
 } // smux_client

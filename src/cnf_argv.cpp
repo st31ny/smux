@@ -158,6 +158,7 @@ static bool parse_file_spec(std::string const& spec, file_def& fl_def)
 
     // finally, split arguments at the remaining :
     auto arg_start = delim_type + delim.length();
+    fl_def.arg_string = spec.substr(arg_start); // full argument string
     auto arg_end = spec.find(delim, arg_start);
     while(arg_end != std::string::npos)
     {

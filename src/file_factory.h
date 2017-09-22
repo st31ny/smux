@@ -37,6 +37,7 @@ namespace smux_client
         file_type type; ///< file type
         file_mode mode; ///< open mode of the file
         file_args args; ///< arguments for file creation
+        std::string arg_string; ///< argument as a single string (unprocessed)
     };
 
     /**

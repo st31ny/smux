@@ -261,7 +261,7 @@ namespace smux_client
             close(stderr_tmp);
 
             // reopen stdin and stdout according to mode
-            if(mode != file_mode::out) // we want to have stdin
+            if(mode != file_mode::in) // we want to write data out => file needs stdin
             {
                 if(dup2(fd_chld, STDIN_FILENO) == -1)
                 {
@@ -269,7 +269,7 @@ namespace smux_client
                     exit(EXIT_FAILURE);
                 }
             }
-            if(mode != file_mode::in) // we want to have stdout
+            if(mode != file_mode::out) // we want to read data => file needs stdout
             {
                 if(dup2(fd_chld, STDOUT_FILENO) == -1)
                 {

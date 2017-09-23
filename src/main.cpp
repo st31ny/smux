@@ -26,14 +26,39 @@ int main(int argc, const char* argv[])
 
     // parse config
     std::unique_ptr<cnf_argv> conf(new cnf_argv);
-    conf->parse(argc, argv);
+    try
+    {
+        conf->parse(argc, argv);
+    } catch(config_error& e)
+    {
+        std::cerr << "parsing configuration failed: " << e.what() << std::endl;
+        exit(EXIT_FAILURE);
+    }
     print_config(std::clog, *conf);
 
     // create/configure the runtime system
-    auto rt = load_rt(*conf);
+    std::unique_ptr<smux_client::runtime_system> rt;
+    try
+    {
+        rt = load_rt(*conf);
+    } catch(config_error& e)
+    {
+        std::cerr << "file configuration erronous: " << e.what() << std::endl;
+        exit(EXIT_FAILURE);
+    } catch(system_error& e)
+    {
+        std::cerr << "file creation failure: " << e.what() << std::endl;
+        exit(EXIT_FAILURE);
+    }
 
     // pass control to the rt
-    rt->run();
+    try
+    {
+        rt->run();
+    } catch(system_error& e)
+    {
+        std::cerr << "main loop exited: " << e.what() << std::endl;
+    }
 
     return 0;
 }

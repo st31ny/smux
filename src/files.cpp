@@ -266,35 +266,41 @@ namespace smux_client
         pid_t pid = fork();
         if(pid == 0)
         { // child
-            int err = 0;
-
             // close parent side
             close(fd_parent);
 
-            // temporarily remember stderr (to reopen after daemon)
-            int stderr_tmp = dup(STDERR_FILENO);
-            if(stderr_tmp == -1)
-                exit(EXIT_FAILURE);
-            // daemonize, close stdin/stdout/stderr, keep wdir
-            err = daemon(1, 0);
-            if(err)
-                exit(EXIT_FAILURE);
-            // restore stderr
-            if(dup2(stderr_tmp, STDERR_FILENO) == -1)
-                perror("restoring stderr for child process failed");
-            close(stderr_tmp);
-
             // reopen stdin and stdout according to mode
-            if(mode != file_mode::in) // we want to write data out => file needs stdin
+            if(mode == file_mode::in)
             {
+                // we do not write data out => close program's stdin
+                int devNull = open("/dev/null", O_RDONLY);
+                if(devNull != -1)
+                {
+                    dup2(devNull, STDIN_FILENO);
+                    close(devNull);
+                }
+            } else
+            {
+                // we want to write data out => program needs stdin
                 if(dup2(fd_chld, STDIN_FILENO) == -1)
                 {
                     perror("establishing child communication failed");
                     exit(EXIT_FAILURE);
                 }
             }
-            if(mode != file_mode::out) // we want to read data => file needs stdout
+            if(mode == file_mode::out)
             {
+                // we do not want to read data in => close program's stdout
+                int devNull = open("/dev/null", O_WRONLY);
+                if(devNull != -1)
+                {
+                    dup2(devNull, STDOUT_FILENO);
+                    close(devNull);
+                }
+
+            } else
+            {
+                // we want to read data => program needs stdout
                 if(dup2(fd_chld, STDOUT_FILENO) == -1)
                 {
                     perror("establishing child communication failed");
@@ -319,12 +325,14 @@ namespace smux_client
             if(mode != file_mode::in)
                 _fdw = fd_parent;
 
+            /*
             int result;
             if(waitpid(pid, &result, 0) == -1)
                 throw system_error(errno);
 
             if((WIFEXITED(result) && WEXITSTATUS(result) != 0) || WIFSIGNALED(result))
                 throw system_error("child process terminated with error");
+            // */
         } else
         {
             // error

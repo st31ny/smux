@@ -213,10 +213,34 @@ namespace smux_client
             }
     };
 
+    // wrapper for exec for socat
+    class socat : public exec_base
+    {
+        public:
+            socat(file_def const& fl_def)
+            {
+                static const std::string socat_binary("socat");
+                std::vector<std::string> args;
+                // socat shall use stdin, stdout or both, depending on mode
+                if(fl_def.mode == file_mode::in)
+                    args.push_back("stdout");
+                else if(fl_def.mode == file_mode::out)
+                    args.push_back("stdin");
+                else
+                    args.push_back("stdio");
+                // second argument describes other end of connection
+                args.push_back(fl_def.arg_string);
+
+                // execute!
+                init(socat_binary, args, fl_def.mode);
+            }
+    };
+
     // register file types
     static register_file_type<regular_file> regular_file_registrar("file");
     static register_file_type<stdio_file> stdin_file_registrar("stdio");
     static register_file_type<exec> exec_registrar("exec");
+    static register_file_type<socat> socat_registrar("socat");
 
     // implementation
     void exec_base::init(std::string const& path, std::vector<std::string> const& args, file_mode mode)

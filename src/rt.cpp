@@ -1,6 +1,11 @@
 // rt.cpp
-#include <errno.h>
+#include <cstring>
 #include <iostream>
+
+#include <errno.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/select.h>
 
 #include "rt.h"
 
@@ -45,12 +50,24 @@ void runtime_system::run()
     while(true)
     {
         fd_sets _fs_tmp = _fs;
-        int nfds = std::max({_fs.read.fd_max, _fs.write.fd_max, _fs.except.fd_max}) + 1;
+        _fs_tmp.read.set(_pipesig_r); // setup signal notification pipe
+        int nfds = std::max({_fs_tmp.read.fd_max, _fs_tmp.write.fd_max, _fs_tmp.except.fd_max}) + 1;
         std::clog << "calling select()..." << std::endl;
         int select_result = select(nfds, &_fs_tmp.read.fs, &_fs_tmp.write.fs, &_fs_tmp.except.fs, nullptr);
         std::clog << "called select()=" << select_result << std::endl;
         if(select_result < 0)
+        {
+            if(errno == EINTR) // tolerate interrupted syscall
+                continue;
             throw system_error(errno);
+        }
+
+        // shutdown signal received?
+        if(_fs_tmp.read.is_set(_pipesig_r))
+        {
+            std::clog << "shutdown signal received: exiting main loop" << std::endl;
+            return;
+        }
 
         for(file_descriptor fd = 0; fd < nfds; ++fd)
         {
@@ -149,6 +166,26 @@ void runtime_system::run()
     }
 }
 
+void runtime_system::shutdown()
+{
+    // signal event by writing to the pipe
+    if(_pipesig_w >= 0)
+    {
+        // send a char to wakeup select()
+        static const char dump = 0;
+        write(_pipesig_w, &dump, 1);
+    }
+}
+
+runtime_system::~runtime_system()
+{
+    // close signal notification pipe
+    if(_pipesig_r >= 0)
+        close(_pipesig_r);
+    if(_pipesig_w >= 0)
+        close(_pipesig_w);
+}
+
 void runtime_system::_update_fds(half_channel& hc)
 {
     // ask file for its file descriptors
@@ -190,4 +227,17 @@ void runtime_system::_update_fds(half_channel& hc)
     hc.fds.read = std::move(read_fds);
     hc.fds.write = std::move(write_fds);
     hc.fds.except = std::move(except_fds);
+}
+
+void runtime_system::_setup_shutdown_pipe()
+{
+    std::clog << "initialize shutdown pipe" << std::endl;
+    int pipefd[2];
+    if(pipe(pipefd))
+        std::clog << "error initializing shutdown notification: " << std::strerror(errno) << std::endl;
+    else
+    {
+        _pipesig_r = pipefd[0];
+        _pipesig_w = pipefd[1];
+    }
 }

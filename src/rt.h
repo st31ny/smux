@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 #include <unordered_map>
-#include <sys/select.h>
 
 #include <smux.hpp>
 
@@ -39,6 +38,8 @@ namespace smux_client
             runtime_system(std::unique_ptr<file> master_in, std::unique_ptr<file> master_out)
                 : _smux(SMUX_BUFFER_SIZE)
             {
+                _setup_shutdown_pipe();
+
                 if(master_in)
                     _master.in = std::make_shared<half_channel>(0, std::move(master_in));
                 if(master_out)
@@ -52,6 +53,8 @@ namespace smux_client
             runtime_system(std::unique_ptr<file> master)
                 : _smux(SMUX_BUFFER_SIZE)
             {
+                _setup_shutdown_pipe();
+
                 if(master)
                 {
                     _master.in = std::make_shared<half_channel>(0, std::move(master));
@@ -106,6 +109,18 @@ namespace smux_client
              * (except in case of error).
              */
             void run();
+
+            /**
+             * \brief                   asynchronous shutdown
+             *
+             * This function is meant to be called from a signal handler.
+             */
+            void shutdown();
+
+            /**
+             * \brief                   dtor
+             */
+            ~runtime_system();
 
         private:
             using buffer = std::vector<char>;
@@ -186,6 +201,8 @@ namespace smux_client
             fd_map _fm;
             // file descritor sets for select()
             fd_sets _fs;
+            // pipe that becomes readable on shutdown signal reception
+            int _pipesig_r = -1, _pipesig_w;
 
 
             /**
@@ -202,6 +219,9 @@ namespace smux_client
                 if(c.in != c.out && c.out)
                     _update_fds(*c.out);
             }
+
+            // init _pipesig_r/w
+            void _setup_shutdown_pipe();
     };
 } // namespace smux_client
 

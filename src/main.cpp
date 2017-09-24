@@ -1,9 +1,13 @@
 // main.cpp
 #include <iostream>
 #include <string>
-#include <chrono>
 #include <stdlib.h>
+#include <cstring>
+
+#include <sys/types.h>
+#include <signal.h>
 #include <unistd.h>
+
 #include <smux.hpp>
 
 #include "file_factory.h"
@@ -20,9 +24,41 @@
  */
 static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf const& conf);
 
+// runtime system
+static std::unique_ptr<smux_client::runtime_system> rt;
+
+// signal handling
+static void signal_handler(int, siginfo_t *, void *)
+{
+    if(rt)
+        rt->shutdown();
+}
+static void setup_signals()
+{
+    // catch signals to allow clean shutdown
+    struct sigaction sa;
+    sa.sa_sigaction = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+    if(sigaction(SIGTERM, &sa, 0) || sigaction(SIGINT, &sa, 0) ||
+            sigaction(SIGPIPE, &sa, 0) || sigaction(SIGHUP, &sa, 0))
+        std::cerr << "registering signal handler failed: " << std::strerror(errno) << std::endl;
+
+    // ignore SIGCHLD and clean up children automatically
+    sa.sa_handler = SIG_DFL;
+    sa.sa_flags = SA_NOCLDWAIT;
+    if(sigaction(SIGCHLD, &sa, 0))
+        std::cerr << "registering signal handler failed: " << std::strerror(errno) << std::endl;
+}
+
 int main(int argc, const char* argv[])
 {
     using namespace smux_client;
+
+    std::clog << "Welcome to smux!" << std::endl;
+
+    // setup signal handlers
+    setup_signals();
 
     // parse config
     std::unique_ptr<cnf_argv> conf(new cnf_argv);
@@ -37,7 +73,6 @@ int main(int argc, const char* argv[])
     print_config(std::clog, *conf);
 
     // create/configure the runtime system
-    std::unique_ptr<smux_client::runtime_system> rt;
     try
     {
         rt = load_rt(*conf);

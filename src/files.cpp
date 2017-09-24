@@ -2,6 +2,7 @@
 #include "file.h"
 #include "file_factory.h"
 
+#include <iostream>
 #include <sstream>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <stdio.h> // for perror
@@ -180,6 +182,13 @@ namespace smux_client
             exec_base()
             {}
 
+            virtual ~exec_base()
+            {
+                // send SIGHUP to child process
+                if(_child_pid)
+                    kill(_child_pid, SIGHUP);
+            }
+
         protected:
             /**
              * \brief                   fork and exec
@@ -189,6 +198,9 @@ namespace smux_client
              * \throw system_error
              */
             void init(std::string const& path, std::vector<std::string> const& args, file_mode mode);
+
+        private:
+            pid_t _child_pid = 0;
     };
 
     // simple program execution
@@ -325,14 +337,8 @@ namespace smux_client
             if(mode != file_mode::in)
                 _fdw = fd_parent;
 
-            /*
-            int result;
-            if(waitpid(pid, &result, 0) == -1)
-                throw system_error(errno);
-
-            if((WIFEXITED(result) && WEXITSTATUS(result) != 0) || WIFSIGNALED(result))
-                throw system_error("child process terminated with error");
-            // */
+            // remember pid for later killing
+            _child_pid = pid;
         } else
         {
             // error

@@ -113,12 +113,16 @@ static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf con
         rt.reset(new runtime_system(std::move(io)));
     } else // asymmetric
     {
-        std::clog << "open master-in" << std::endl;
         if(conf.master().in)
+        {
+            std::clog << "open master-in" << std::endl;
             in = fac->create(*conf.master().in);
-        std::clog << "open master-out" << std::endl;
+        }
         if(conf.master().out)
+        {
+            std::clog << "open master-out" << std::endl;
             out = fac->create(*conf.master().out);
+        }
         if(in || out)
             rt.reset(new runtime_system(std::move(in), std::move(out)));
         else // neither master in nor master out defined... what are we doing here?
@@ -136,12 +140,16 @@ static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf con
             rt->add_channel(fl_def.first, std::move(io));
         } else
         {
-            std::clog << "in ";
             if(fl_def.second.in)
+            {
+                std::clog << "in ";
                 in = fac->create(*fl_def.second.in);
-            std::clog << "out";
+            }
             if(fl_def.second.out)
+            {
+                std::clog << "out";
                 out = fac->create(*fl_def.second.out);
+            }
             if(in || out)
                 rt->add_channel(fl_def.first, std::move(in), std::move(out));
         }

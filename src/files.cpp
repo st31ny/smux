@@ -141,8 +141,15 @@ namespace smux_client
                 fd_type fd = open(args[0].c_str(), flags, 0666);
                 if(fd == -1)
                     throw system_error(errno);
-                _fdr = fd;
-                _fdw = fd;
+                switch(fl_def.mode)
+                {
+                    case file_mode::io:
+                        _fdr = fd; _fdw = fd; break;
+                    case file_mode::in:
+                        _fdr = fd; break;
+                    case file_mode::out:
+                        _fdw = fd;
+                }
             }
     };
 

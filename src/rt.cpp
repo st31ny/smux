@@ -88,32 +88,36 @@ void runtime_system::run()
                     std::clog << "_smux.read() done" << std::endl;
 
                     // receive data
-                    smux_channel ch;
-                    buf.resize(RECEIVE_BUFFER_SIZE);
-                    std::size_t ret = _smux.recv(&ch, buf.data(), buf.size());
-
-                    // forward data to the correct output
-                    if(ret > 0)
+                    std::size_t ret;
+                    do
                     {
-                        if(_channels.count(ch))
+                        smux_channel ch;
+                        buf.resize(RECEIVE_BUFFER_SIZE);
+                        ret = _smux.recv(&ch, buf.data(), buf.size());
+
+                        // forward data to the correct output
+                        if(ret > 0)
                         {
-                            auto& hc_out = _channels[ch].out;
-                            if(hc_out)
+                            if(_channels.count(ch))
                             {
-                                auto& out_buffer = hc_out->out_buffer;
-                                buf.resize(ret); // remember correct size
-                                if(out_buffer.size() == 0) // no data waiting currently?
-                                    out_buffer = std::move(buf);
-                                else
-                                    out_buffer.insert(out_buffer.end(), buf.begin(), buf.end());
-                                _update_fds(*hc_out);
-                                std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
+                                auto& hc_out = _channels[ch].out;
+                                if(hc_out)
+                                {
+                                    auto& out_buffer = hc_out->out_buffer;
+                                    buf.resize(ret); // remember correct size
+                                    if(out_buffer.size() == 0) // no data waiting currently?
+                                        out_buffer = std::move(buf);
+                                    else
+                                        out_buffer.insert(out_buffer.end(), buf.begin(), buf.end());
+                                    _update_fds(*hc_out);
+                                    std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
+                                }
+                            } else // channel not existing
+                            {
+                                std::clog << "ignoring data for channel " << static_cast<int>(ch) << std::endl;
                             }
-                        } else // channel not existing
-                        {
-                            std::clog << "igonring data for channel " << static_cast<int>(ch) << std::endl;
                         }
-                    }
+                    } while(ret != 0);
                 } else
                 {
                     // a channel is ready to be read

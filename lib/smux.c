@@ -115,6 +115,7 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
     char *read_buf = (char*)config->buffer.read_buf;
     unsigned read_buf_head = config->_internal.read_buf_head;
     unsigned read_buf_tail = config->_internal.read_buf_tail;
+    unsigned read_buf_tail_old;
     size_t read_buf_size = config->buffer.read_buf_size;
     smux_channel recv_ch = config->_internal.recv_ch; // current channel
     size_t recv_chars = config->_internal.recv_chars; // remaining payload chars
@@ -130,13 +131,17 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
         read_buf_head != read_buf_tail // receive buffer not empty
     )
     {
+        read_buf_tail_old = read_buf_tail;
         if(read_buf[read_buf_tail] == esc)
         {
             read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
 
             // another char to decode esc seq?
             if(read_buf_tail == read_buf_head)
+            {
+                read_buf_tail = read_buf_tail_old; // stuff read bytes back
                 break;
+            }
 
             if(read_buf[read_buf_tail] == 0) // just escape of esc char
             {
@@ -147,7 +152,10 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
             {
                 // enough to decode channel and size?
                 if(RBUSED(read_buf_head, read_buf_tail, read_buf_size) < PROTO_CHANNEL_BYTES + PROTO_SIZE_BYTES)
+                {
+                    read_buf_tail = read_buf_tail_old;
                     break;
+                }
 
                 recv_ch = read_buf[read_buf_tail];
                 read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);

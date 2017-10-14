@@ -132,22 +132,22 @@ static std::unique_ptr<smux_client::runtime_system> load_rt(smux_client::cnf con
     // create/add all files
     for(auto const& fl_def : conf.channels())
     {
-        std::clog << "open ch " << static_cast<unsigned>(fl_def.first) << " ";
+        std::clog << "open ch " << static_cast<unsigned>(fl_def.first) << "\n";
         if(fl_def.second.io) // symmetric file
         {
-            std::clog << "io";
+            std::clog << ">> io\n";
             io = fac->create(*fl_def.second.io);
             rt->add_channel(fl_def.first, std::move(io));
         } else
         {
             if(fl_def.second.in)
             {
-                std::clog << "in ";
+                std::clog << ">>in\n";
                 in = fac->create(*fl_def.second.in);
             }
             if(fl_def.second.out)
             {
-                std::clog << "out";
+                std::clog << ">>out\n";
                 out = fac->create(*fl_def.second.out);
             }
             if(in || out)

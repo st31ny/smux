@@ -346,6 +346,7 @@ namespace smux_client
 
             // remember pid for later killing
             _child_pid = pid;
+            std::clog << "spawned child process pid=" << (unsigned)pid << std::endl;
         } else
         {
             // error

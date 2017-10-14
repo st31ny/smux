@@ -83,7 +83,15 @@ namespace smux_client
              */
             std::unique_ptr<file> create(file_def const& def)
             {
-                return _registry.at(def.type)(def);
+                try
+                {
+                    return _registry.at(def.type)(def);
+                } catch(std::out_of_range&)
+                {
+                    throw config_error("unknown file type '" + def.type + "'");
+                }
+                // never reached
+                return nullptr;
             }
 
         private:

@@ -240,6 +240,8 @@ namespace smux_client
             {
                 static const std::string socat_binary("socat");
                 std::vector<std::string> args;
+                args.push_back("-d");
+                args.push_back("-d");
                 // socat shall use stdin, stdout or both, depending on mode
                 if(fl_def.mode == file_mode::in)
                     args.push_back("stdout");

@@ -116,9 +116,7 @@ struct smux_config
          *                          NULL is acceptable
          *
          * If NULL, characters will not be send automatically but need to be extracted
-         * with polling. See smux_send_mux().
-         *
-         * On *nix platforms, this will typically be set to write() from unistd.h.
+         * with polling. TODO: Implement this.
          */
         smux_write_fn write_fn;
         /// data (file descriptor) to pass to write_fn
@@ -129,9 +127,8 @@ struct smux_config
          *                          NULL is acceptable
          *
          * If NULL, characters will not be received automatically but need to be inserted
-         * explicitly. See smux_recv_mux().
-         *
-         * On *nix platforms, this will typically be set to read() from unistd.h.
+         * explicitly. Alternatively, use smux_read_buf to directly copy bytes into the
+         * read buffer.
          */
         smux_read_fn read_fn;
         /// data (file descriptor) to pass to read_fn
@@ -241,6 +238,17 @@ ssize_t smux_write(struct smux_config *config);
  * or the read function has signalled an error (return <0).
  */
 ssize_t smux_read(struct smux_config *config);
+
+/**
+ * \brief                   read multiplexed data into the internal buffer from an
+ *                          external buffer
+ * \param[in,out] config    initialized smux_config
+ * \param buf               buffer to read from
+ * \param count             maximum number of characters in buf
+ * \retval >0               number of copied bytes
+ * \retval  0               read buffer completely filled
+ */
+size_t smux_read_buf(struct smux_config *config, const void* buf, size_t count);
 
 #ifdef __cplusplus
 }

@@ -283,3 +283,23 @@ ssize_t smux_read(struct smux_config *config)
     // do not count the one byte that always has to stay free
     return read_buf_size - RBUSED(read_buf_head, read_buf_tail, read_buf_size) - 1;
 }
+
+size_t smux_read_buf(struct smux_config *config, const void* buf, size_t count)
+{
+    char *read_buf = (char*)config->buffer.read_buf;
+    unsigned read_buf_head = config->_internal.read_buf_head;
+    unsigned read_buf_tail = config->_internal.read_buf_tail;
+    size_t read_buf_size = config->buffer.read_buf_size;
+    char *cbuf = (char*)buf;
+
+    unsigned copied = 0;
+
+    while(ADJRBI(read_buf_head + 1, read_buf_size) != read_buf_tail && copied < count)
+    {
+        read_buf[read_buf_head] = cbuf[copied];
+        read_buf_head = ADJRBI(read_buf_head + 1, read_buf_size);
+        copied++;
+    }
+    config->_internal.read_buf_head = read_buf_head;
+    return copied;
+}

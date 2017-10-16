@@ -154,6 +154,15 @@ namespace smux
             }
 
             /**
+             * \brief                   low-level read_buf function
+             * \see                     smux_read_buf
+             */
+            size_t read_buf(const void* buf, size_t count)
+            {
+                return smux_read_buf(&_smux, buf, count);
+            }
+
+            /**
              * \brief                   get raw access to the smux config if you are brave
              * \return                  pointer to the used smux_config
              */

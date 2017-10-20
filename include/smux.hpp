@@ -70,14 +70,15 @@ namespace smux
         public:
             /**
              * \brief                   ctor
-             * \pararm buf_size         write/read buffer size (must be >= 16)
+             * \param read_buf_size     reader buffer size (must be >= 16)
+             * \param write_buf_size    writer buffer size (must be >= 16)
              */
-            connection(size_t buf_size = 1024)
+            connection(size_t read_buf_size = 1024, size_t write_buf_size = 1024)
             {
-                if(buf_size < 16)
+                if(read_buf_size < 16 || write_buf_size < 16)
                     throw config_error("smux requires a buffer size of at least 16 bytes");
-                _write_buf.resize(buf_size);
-                _read_buf.resize(buf_size);
+                _write_buf.resize(write_buf_size);
+                _read_buf.resize(read_buf_size);
 
                 // init smux config
                 smux_init(&_smux);

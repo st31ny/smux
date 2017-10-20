@@ -52,9 +52,9 @@ void runtime_system::run()
         fd_sets _fs_tmp = _fs;
         _fs_tmp.read.set(_pipesig_r); // setup signal notification pipe
         int nfds = std::max({_fs_tmp.read.fd_max, _fs_tmp.write.fd_max, _fs_tmp.except.fd_max}) + 1;
-        std::clog << "calling select()..." << std::endl;
+        if(0) std::clog << "calling select()..." << std::endl;
         int select_result = select(nfds, &_fs_tmp.read.fs, &_fs_tmp.write.fs, &_fs_tmp.except.fs, nullptr);
-        std::clog << "called select()=" << select_result << std::endl;
+        if(0) std::clog << "called select()=" << select_result << std::endl;
         if(select_result < 0)
         {
             if(errno == EINTR) // tolerate interrupted syscall
@@ -82,10 +82,10 @@ void runtime_system::run()
             {
                 if(&hc == master_in)
                 {
-                    std::clog << "master read event" << std::endl;
+                    if(0) std::clog << "master read event" << std::endl;
                     if(_smux.read() < 0)
                         throw system_error("reading into smux buffer failed");
-                    std::clog << "_smux.read() done" << std::endl;
+                    if(0) std::clog << "_smux.read() done" << std::endl;
 
                     // receive data
                     std::size_t ret;
@@ -110,23 +110,24 @@ void runtime_system::run()
                                     else
                                         out_buffer.insert(out_buffer.end(), buf.begin(), buf.end());
                                     _update_fds(*hc_out);
-                                    std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
+                                    if(0) std::clog << "received data for channel " << static_cast<int>(ch) << std::endl;
                                 }
                             } else // channel not existing
                             {
-                                std::clog << "ignoring data for channel " << static_cast<int>(ch) << std::endl;
+                                std::clog << "\nignoring data for channel " << static_cast<int>(ch) << std::endl;
                             }
                         }
                     } while(ret != 0);
                 } else
                 {
                     // a channel is ready to be read
-                    std::clog << "read event on channel " << static_cast<int>(hc.ch) << ", fd=" << fd << std::endl;
+                    if(0) std::clog << "read event on channel " << static_cast<int>(hc.ch) << ", fd=" << fd << std::endl;
                     buf.resize(RECEIVE_BUFFER_SIZE);
 
                     std::size_t ret = hc.fl->read(buf.data(), buf.size());
                     if(ret > 0)
                     {
+                        std::clog << '<' << static_cast<int>(hc.ch) << std::flush;
                         // forward data to smux
                         smux::ostream out(_smux, hc.ch);
                         out.write(buf.data(), ret);
@@ -140,12 +141,13 @@ void runtime_system::run()
             {
                 if(&hc == master_out)
                 {
-                    std::clog << "master write event" << std::endl;
+                    if(0) std::clog << "master write event" << std::endl;
                     // master is written directly as it is the bottleneck anyway
                 } else
                 {
                     // a channel is ready to be written
-                    std::clog << "write event on channel " << static_cast<int>(hc.ch) << ", fd=" << fd << std::endl;
+                    if(0) std::clog << "write event on channel " << static_cast<int>(hc.ch) << ", fd=" << fd << std::endl;
+                    std::clog << '>' << static_cast<int>(hc.ch) << std::flush;
                     if(hc.out_buffer.size() > 0)
                     {
                         std::size_t ret = hc.fl->write(hc.out_buffer.data(), hc.out_buffer.size());
@@ -158,7 +160,7 @@ void runtime_system::run()
             // exception
             if(_fs_tmp.except.is_set(fd))
             {
-                std::clog << "except event on " << fd << std::endl;
+                std::clog << "\nexcept event on " << fd << std::endl;
 
                 // call exception handler
                 hc.fl->exception_event(fd);

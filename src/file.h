@@ -104,6 +104,12 @@ namespace smux_client
              */
             virtual std::size_t write(const void* buf, std::size_t count) = 0;
 
+            /**
+             * \brief                   file has reached eof
+             * \return                  true if read part is at eof
+             */
+            virtual bool eof() = 0;
+
 
             /**
              * \brief                   dtor

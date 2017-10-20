@@ -76,7 +76,10 @@ namespace smux_client
                 if(ret < 0)
                     throw system_error(errno);
                 if(ret == 0) // eof -> avoid further read events
+                {
                     _eof = true;
+                    if(0) std::clog << "eof signaled" << std::endl;
+                }
                 return static_cast<std::size_t>(ret);
             }
 
@@ -88,6 +91,11 @@ namespace smux_client
                 if(ret < 0)
                     throw system_error(errno);
                 return static_cast<std::size_t>(ret);
+            }
+
+            virtual bool eof()
+            {
+                return _eof;
             }
 
             virtual ~simple_file()

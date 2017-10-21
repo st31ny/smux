@@ -20,6 +20,8 @@ void runtime_system::run()
     half_channel* master_out = _master.out.get();
     if(master_in)
     {
+        // we cannot tell if more characters are available (read(2) does not tell us), but main loop
+        // will call smux.read again if necessary
         _smux.set_read_fn([master_in](void* buf, size_t count) { return master_in->fl->read(buf, count); });
     } else
     {

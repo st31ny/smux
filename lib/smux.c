@@ -209,7 +209,7 @@ ssize_t smux_write(struct smux_config *config)
     smux_write_fn write_fn = config->buffer.write_fn;
     void *fd = config->buffer.write_fd;
 
-    ssize_t ret;
+    ssize_t ret, count;
     unsigned end;
 
     if(write_fn)
@@ -219,11 +219,12 @@ ssize_t smux_write(struct smux_config *config)
             // end of area to transmit
             end = write_buf_tail < write_buf_head ? write_buf_head : write_buf_size;
 
-            ret = write_fn(fd, (void*)(write_buf + write_buf_tail), end - write_buf_tail);
+            count = end - write_buf_tail;
+            ret = write_fn(fd, (void*)(write_buf + write_buf_tail), count);
             if(ret <= 0)
                 break;
 
-            write_buf_tail = ADJRBI(write_buf_tail + ret, write_buf_size);
+            write_buf_tail = ADJRBI(write_buf_tail + (ret>count?count:ret), write_buf_size);
         }
 
         // optimization: if buffer is empty, reset head and tail to beginning
@@ -251,8 +252,8 @@ ssize_t smux_read(struct smux_config *config)
     smux_read_fn read_fn = config->buffer.read_fn;
     void *fd = config->buffer.read_fd;
 
-    ssize_t ret;
-    unsigned end, count;
+    ssize_t ret = 0, count;
+    unsigned end;
 
     if(read_fn)
     {
@@ -268,9 +269,9 @@ ssize_t smux_read(struct smux_config *config)
             if(ret <= 0)
                 break;
 
-            read_buf_head = ADJRBI(read_buf_head + ret, read_buf_size);
-            // received less bytes than requested?
-            if((unsigned)ret < count)
+            read_buf_head = ADJRBI(read_buf_head + (ret>count?count:ret), read_buf_size);
+            // more bytes available?
+            if(ret <= count)
                 break;
         }
 

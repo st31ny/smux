@@ -68,6 +68,7 @@ typedef ssize_t (*smux_write_fn)(void *fd, const void *buf, size_t count);
  * \param fd                pointer to user data (e.g., a file descriptor)
  * \param[out] buf          buffer to write read data to
  * \param count             maximum number of bytes to read
+ * \retval >count           more bytes available to read, count bytes copied to buf
  * \retval >=0              number of read bytes
  * \retval  <0              error
  */
@@ -229,13 +230,14 @@ ssize_t smux_write(struct smux_config *config);
  *                          configured read function
  * \param[in,out] config    initialized smux_config
  * \retval >0               remaining free space in the buffer
- * \retval  0               read buffer completely filled)
+ * \retval  0               read buffer completely filled
  * \retval <0               error (from the read function)
  *
  * The function can be called if config->buffer.read_fn is not NULL to read data into
- * the read buffer. The read function is called several times until either the read buffer
- * is full (return 0), the read function returns less characters than requested (return >0)
- * or the read function has signalled an error (return <0).
+ * the read buffer. The read function is called several times until the read buffer
+ * is full (return 0) if the read functions signals ability to serve more characters.
+ * If the read function has signalled an error (return <0), no further reads are
+ * attempted.
  */
 ssize_t smux_read(struct smux_config *config);
 

@@ -57,6 +57,7 @@ namespace smux
      * \brief                   function type for read function
      * \param buf               data buffer to read into
      * \param count             capacity of buf
+     * \retval >count           more bytes available to read, count bytes copied to buf
      * \retval >=0              number of read bytes
      * \retval  <0              error
      */

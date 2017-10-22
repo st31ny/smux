@@ -47,10 +47,10 @@ void smux_free(struct smux_config_send *cs, struct smux_config_recv *cr)
 size_t smux_send(struct smux_config_send *config, smux_channel ch, const void *buf, size_t count)
 {
     char *write_buf = (char*)config->buffer.write_buf;
-    unsigned write_buf_head = config->_internal.write_buf_head;
-    unsigned write_buf_tail = config->_internal.write_buf_tail;
+    unsigned wb_head = config->_internal.wb_head;
+    unsigned wb_tail = config->_internal.wb_tail;
     size_t write_buf_size = config->buffer.write_buf_size;
-    size_t write_buf_used = RBUSED(write_buf_head, write_buf_tail, write_buf_size);
+    size_t write_buf_used = RBUSED(wb_head, wb_tail, write_buf_size);
     unsigned size_field = 0; // size field position in write_buf
     char esc = config->proto.esc;
 
@@ -72,33 +72,33 @@ size_t smux_send(struct smux_config_send *config, smux_channel ch, const void *b
             return 0;
 
         // esc char
-        write_buf[write_buf_head] = esc;
-        write_buf_head = ADJRBI(write_buf_head + 1, write_buf_size);
+        write_buf[wb_head] = esc;
+        wb_head = ADJRBI(wb_head + 1, write_buf_size);
         // channel field (1 byte)
-        write_buf[write_buf_head] = (char)ch;
-        write_buf_head = ADJRBI(write_buf_head + 1, write_buf_size);
+        write_buf[wb_head] = (char)ch;
+        wb_head = ADJRBI(wb_head + 1, write_buf_size);
         // keep space for size field (2 bytes)
-        size_field = write_buf_head;
-        write_buf_head = ADJRBI(write_buf_head + 2, write_buf_size);
+        size_field = wb_head;
+        wb_head = ADJRBI(wb_head + 2, write_buf_size);
     }
 
     // copy the data in while not full
-    for(; (count_copied < count) && (ADJRBI(write_buf_head + 1, write_buf_size) != write_buf_tail); count_copied++)
+    for(; (count_copied < count) && (ADJRBI(wb_head + 1, write_buf_size) != wb_tail); count_copied++)
     {
         if(input_buf[count_copied] == esc)
         {
             // enough space for two characters?
-            if(ADJRBI(write_buf_head + 2, write_buf_size) == write_buf_tail)
+            if(ADJRBI(wb_head + 2, write_buf_size) == wb_tail)
                 break;
             // escape the escape char with esc + '\0'
-            write_buf[write_buf_head] = esc;
-            write_buf_head = ADJRBI(write_buf_head + 1, write_buf_size);
-            write_buf[write_buf_head] = 0;
-            write_buf_head = ADJRBI(write_buf_head + 1, write_buf_size);
+            write_buf[wb_head] = esc;
+            wb_head = ADJRBI(wb_head + 1, write_buf_size);
+            write_buf[wb_head] = 0;
+            wb_head = ADJRBI(wb_head + 1, write_buf_size);
         } else
         {
-            write_buf[write_buf_head] = input_buf[count_copied];
-            write_buf_head = ADJRBI(write_buf_head + 1, write_buf_size);
+            write_buf[wb_head] = input_buf[count_copied];
+            wb_head = ADJRBI(wb_head + 1, write_buf_size);
         }
     }
 
@@ -111,7 +111,7 @@ size_t smux_send(struct smux_config_send *config, smux_channel ch, const void *b
     }
 
     // write head index back
-    config->_internal.write_buf_head = write_buf_head;
+    config->_internal.wb_head = wb_head;
 
     return count_copied;
 }
@@ -119,9 +119,9 @@ size_t smux_send(struct smux_config_send *config, smux_channel ch, const void *b
 size_t smux_recv(struct smux_config_recv *config, smux_channel *ch, void *buf, size_t count)
 {
     char *read_buf = (char*)config->buffer.read_buf;
-    unsigned read_buf_head = config->_internal.read_buf_head;
-    unsigned read_buf_tail = config->_internal.read_buf_tail;
-    unsigned read_buf_tail_old;
+    unsigned rb_head = config->_internal.rb_head;
+    unsigned rb_tail = config->_internal.rb_tail;
+    unsigned rb_tail_old;
     size_t read_buf_size = config->buffer.read_buf_size;
     smux_channel recv_ch = config->_internal.recv_ch; // current channel
     size_t recv_chars = config->_internal.recv_chars; // remaining payload chars
@@ -134,41 +134,41 @@ size_t smux_recv(struct smux_config_recv *config, smux_channel *ch, void *buf, s
     *ch = recv_ch;
     while(count_copied < count && // caller buffer not full
         (recv_ch == 0 || recv_chars > 0) && // we are still receiving for recv_ch
-        read_buf_head != read_buf_tail // receive buffer not empty
+        rb_head != rb_tail // receive buffer not empty
     )
     {
-        read_buf_tail_old = read_buf_tail;
-        if(read_buf[read_buf_tail] == esc)
+        rb_tail_old = rb_tail;
+        if(read_buf[rb_tail] == esc)
         {
-            read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
+            rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
 
             // another char to decode esc seq?
-            if(read_buf_tail == read_buf_head)
+            if(rb_tail == rb_head)
             {
-                read_buf_tail = read_buf_tail_old; // stuff read bytes back
+                rb_tail = rb_tail_old; // stuff read bytes back
                 break;
             }
 
-            if(read_buf[read_buf_tail] == 0) // just escape of esc char
+            if(read_buf[rb_tail] == 0) // just escape of esc char
             {
                 output_buf[count_copied++] = esc;
                 recv_chars -= 1;
-                read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
+                rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
             } else // channel information
             {
                 // enough to decode channel and size?
-                if(RBUSED(read_buf_head, read_buf_tail, read_buf_size) < PROTO_CHANNEL_BYTES + PROTO_SIZE_BYTES)
+                if(RBUSED(rb_head, rb_tail, read_buf_size) < PROTO_CHANNEL_BYTES + PROTO_SIZE_BYTES)
                 {
-                    read_buf_tail = read_buf_tail_old;
+                    rb_tail = rb_tail_old;
                     break;
                 }
 
-                recv_ch = read_buf[read_buf_tail];
-                read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
-                recv_chars = (read_buf[read_buf_tail] << 8) & 0xFF00;
-                read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
-                recv_chars |= read_buf[read_buf_tail] & 0xFF;
-                read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
+                recv_ch = read_buf[rb_tail];
+                rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
+                recv_chars = (read_buf[rb_tail] << 8) & 0xFF00;
+                rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
+                recv_chars |= read_buf[rb_tail] & 0xFF;
+                rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
 
                 if(count_copied > 0)
                 {
@@ -182,22 +182,22 @@ size_t smux_recv(struct smux_config_recv *config, smux_channel *ch, void *buf, s
             }
         } else // normal case (no esc char)
         {
-            output_buf[count_copied++] = read_buf[read_buf_tail];
+            output_buf[count_copied++] = read_buf[rb_tail];
             recv_chars -= 1;
-            read_buf_tail = ADJRBI(read_buf_tail + 1, read_buf_size);
+            rb_tail = ADJRBI(rb_tail + 1, read_buf_size);
         }
     }
 
     // optimization: reset head and tail if buffer empty
-    if(read_buf_tail == read_buf_head)
+    if(rb_tail == rb_head)
     {
-        read_buf_tail = 0;
-        read_buf_head = 0;
+        rb_tail = 0;
+        rb_head = 0;
     }
 
     // write indexes and receiver state back
-    config->_internal.read_buf_tail = read_buf_tail;
-    config->_internal.read_buf_head = read_buf_head;
+    config->_internal.rb_tail = rb_tail;
+    config->_internal.rb_head = rb_head;
     if(recv_chars == 0)
         recv_ch = 0; // ensure correct channel if read everything
     config->_internal.recv_ch = recv_ch; // if channel == 0 recv_ch might underflow => but is always ignored in that case
@@ -209,8 +209,8 @@ size_t smux_recv(struct smux_config_recv *config, smux_channel *ch, void *buf, s
 ssize_t smux_write(struct smux_config_send *config)
 {
     char *write_buf = (char*)config->buffer.write_buf;
-    unsigned write_buf_head = config->_internal.write_buf_head;
-    unsigned write_buf_tail = config->_internal.write_buf_tail;
+    unsigned wb_head = config->_internal.wb_head;
+    unsigned wb_tail = config->_internal.wb_tail;
     size_t write_buf_size = config->buffer.write_buf_size;
     smux_write_fn write_fn = config->buffer.write_fn;
     void *fd = config->buffer.write_fd;
@@ -220,40 +220,40 @@ ssize_t smux_write(struct smux_config_send *config)
 
     if(write_fn)
     {
-        while(write_buf_head != write_buf_tail)
+        while(wb_head != wb_tail)
         {
             // end of area to transmit
-            end = write_buf_tail < write_buf_head ? write_buf_head : write_buf_size;
+            end = wb_tail < wb_head ? wb_head : write_buf_size;
 
-            count = end - write_buf_tail;
-            ret = write_fn(fd, (void*)(write_buf + write_buf_tail), count);
+            count = end - wb_tail;
+            ret = write_fn(fd, (void*)(write_buf + wb_tail), count);
             if(ret <= 0)
                 break;
 
-            write_buf_tail = ADJRBI(write_buf_tail + (ret>count?count:ret), write_buf_size);
+            wb_tail = ADJRBI(wb_tail + (ret>count?count:ret), write_buf_size);
         }
 
         // optimization: if buffer is empty, reset head and tail to beginning
-        if(write_buf_tail == write_buf_head)
+        if(wb_tail == wb_head)
         {
-            config->_internal.write_buf_head = 0;
-            write_buf_tail = 0;
+            config->_internal.wb_head = 0;
+            wb_tail = 0;
         }
 
         // write new tail index back
-        config->_internal.write_buf_tail = write_buf_tail;
+        config->_internal.wb_tail = wb_tail;
 
         if(ret < 0) // error?
             return ret;
     }
-    return RBUSED(write_buf_head, write_buf_tail, write_buf_size);
+    return RBUSED(wb_head, wb_tail, write_buf_size);
 }
 
 ssize_t smux_read(struct smux_config_recv *config)
 {
     char *read_buf = (char*)config->buffer.read_buf;
-    unsigned read_buf_head = config->_internal.read_buf_head;
-    unsigned read_buf_tail = config->_internal.read_buf_tail;
+    unsigned rb_head = config->_internal.rb_head;
+    unsigned rb_tail = config->_internal.rb_tail;
     size_t read_buf_size = config->buffer.read_buf_size;
     smux_read_fn read_fn = config->buffer.read_fn;
     void *fd = config->buffer.read_fd;
@@ -264,49 +264,49 @@ ssize_t smux_read(struct smux_config_recv *config)
     if(read_fn)
     {
         // leave one byte space to ensure separation of buffer full/empty
-        while(ADJRBI(read_buf_head + 1, read_buf_size) != read_buf_tail)
+        while(ADJRBI(rb_head + 1, read_buf_size) != rb_tail)
         {
-            end = read_buf_tail <= read_buf_head ? read_buf_size : read_buf_tail - 1;
-            if(read_buf_tail == 0)
+            end = rb_tail <= rb_head ? read_buf_size : rb_tail - 1;
+            if(rb_tail == 0)
                 end = read_buf_size - 1;
 
-            count = end - read_buf_head;
-            ret = read_fn(fd, (void*)(read_buf + read_buf_head), count);
+            count = end - rb_head;
+            ret = read_fn(fd, (void*)(read_buf + rb_head), count);
             if(ret <= 0)
                 break;
 
-            read_buf_head = ADJRBI(read_buf_head + (ret>count?count:ret), read_buf_size);
+            rb_head = ADJRBI(rb_head + (ret>count?count:ret), read_buf_size);
             // more bytes available?
             if(ret <= count)
                 break;
         }
 
         // write new head index back
-        config->_internal.read_buf_head = read_buf_head;
+        config->_internal.rb_head = rb_head;
 
         if(ret < 0) // error?
             return ret;
     }
     // do not count the one byte that always has to stay free
-    return read_buf_size - RBUSED(read_buf_head, read_buf_tail, read_buf_size) - 1;
+    return read_buf_size - RBUSED(rb_head, rb_tail, read_buf_size) - 1;
 }
 
 size_t smux_read_buf(struct smux_config_recv *config, const void* buf, size_t count)
 {
     char *read_buf = (char*)config->buffer.read_buf;
-    unsigned read_buf_head = config->_internal.read_buf_head;
-    unsigned read_buf_tail = config->_internal.read_buf_tail;
+    unsigned rb_head = config->_internal.rb_head;
+    unsigned rb_tail = config->_internal.rb_tail;
     size_t read_buf_size = config->buffer.read_buf_size;
     char *cbuf = (char*)buf;
 
     unsigned copied = 0;
 
-    while(ADJRBI(read_buf_head + 1, read_buf_size) != read_buf_tail && copied < count)
+    while(ADJRBI(rb_head + 1, read_buf_size) != rb_tail && copied < count)
     {
-        read_buf[read_buf_head] = cbuf[copied];
-        read_buf_head = ADJRBI(read_buf_head + 1, read_buf_size);
+        read_buf[rb_head] = cbuf[copied];
+        rb_head = ADJRBI(rb_head + 1, read_buf_size);
         copied++;
     }
-    config->_internal.read_buf_head = read_buf_head;
+    config->_internal.rb_head = rb_head;
     return copied;
 }

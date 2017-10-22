@@ -118,8 +118,8 @@ struct smux_config_send
     // internal state
     struct
     {
-        unsigned write_buf_head; // next character to write
-        unsigned write_buf_tail; // next character to read
+        unsigned wb_head; // next character to write
+        unsigned wb_tail; // next character to read
     } _internal;
 };
 
@@ -167,8 +167,8 @@ struct smux_config_recv
     // internal state
     struct
     {
-        unsigned read_buf_head; // next character to write
-        unsigned read_buf_tail; // next character to read
+        unsigned rb_head; // next character to write
+        unsigned rb_tail; // next character to read
 
         smux_channel recv_ch;
         size_t recv_chars;

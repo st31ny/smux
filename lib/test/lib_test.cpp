@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
     BOOST_TEST(recv == "abcd");
 
     // verify that buffer is empty now
-    BOOST_TEST(receiver._internal.read_buf_head == receiver._internal.read_buf_tail);
+    BOOST_TEST(receiver._internal.rb_head == receiver._internal.rb_tail);
 }
 
 BOOST_AUTO_TEST_CASE(read_buf_overlong)
@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
     BOOST_TEST(recv == "01234567890");
 
     // buffer is empty now
-    BOOST_TEST(receiver._internal.read_buf_head == receiver._internal.read_buf_tail);
+    BOOST_TEST(receiver._internal.rb_head == receiver._internal.rb_tail);
 }
 
 BOOST_AUTO_TEST_CASE(read_into_short_buf)

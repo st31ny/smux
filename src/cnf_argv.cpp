@@ -1,114 +1,94 @@
 // cnf_argv.cpp
 #include <utility> // std::move
+#include <unistd.h> // getopt
 
 #include "cnf_argv.h"
 
 using namespace smux_client;
 
-/**
- * \brief                   parse specification of a file
- * \param spec              textual spec
- * \param[out] fl_def       file definiton
- * \return                  true if successful
- */
-static bool parse_file_spec(std::string const& spec, file_def& fl_def);
+// flA = read part or read/write, flB = write part
+static channel_type parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& flA, file_def& flB);
+static channel_type parse_file_specs(std::string const& spec, file_def& flA, file_def& flB);
+static bool parse_file_spec(std::string const& spec, file_def& fl);
 
-/**
- * \brief                   parse a channel specification (channel id, channel type, file spec)
- * \param spec              channel spec
- * \param[out] ch           channel number
- * \param[out] fl_def       file definition
- * \return                  true if successful
- */
-static bool parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& fl_def);
-
-void cnf_argv::parse(int argc, char const* argv[])
+void cnf_argv::parse(int argc, char *const argv[])
 {
     // first argument is program name
     if(argc > 0)
         _pgrm_name = argv[0];
 
     // loop over the rest
-    for(int i = 1; i < argc; ++i)
+    int optres;
+    while((optres = getopt(argc, argv, ":dhm:c:")) != -1)
     {
-        if(argv[i][0] == '-') // option?
+        switch(optres)
         {
-            if(argv[i][1] == '-')
-            {
-                if(argv[i][2] == 0) // litaral --
+            case 'h':
+                _help_level += 1;
+                break;
+            case 'd':
+                _debug_level += 1;
+                break;
+            case 'm':
                 {
-                    // stop option processing
-                    // positional arguments never start with -, so just ignore it
-                    continue;
-                } else
-                {
-                    // long option
-                    std::string opt(argv[i] + 2);
-
-                    // switch all available options
-                    if(opt == "master") // definiton of master file
+                    // parse file definition
+                    std::unique_ptr<file_def> flA(new file_def), flB(new file_def);
+                    auto ct = parse_file_specs(optarg, *flA, *flB);
+                    switch(ct)
                     {
-                        // get the file specification
-                        if(i + 1 >= argc)
-                            throw config_error("--master requieres an argument");
-                        std::string arg(argv[++i]);
-                        // parse file definition
-                        std::unique_ptr<file_def> fl_def(new file_def);
-                        if(!parse_file_spec(arg, *fl_def))
-                            throw config_error(std::string("unable to parse master file specification: ") + arg);
-                        // add master file spec
-                        if(fl_def->mode == file_mode::io)
-                            set_master_file(std::move(fl_def));
-                        else if(fl_def->mode == file_mode::in)
-                            set_master_file_in(std::move(fl_def));
-                        else
-                            set_master_file_out(std::move(fl_def));
-                    } else
-                        throw config_error("unknown option --" + opt);
-                }
-            } else
-            {
-                // short option
-                std::string opt(argv[i] + 1);
-                for(auto& o : opt)
-                {
-                    switch(o)
-                    {
-                        case 'h':
-                            _help_level++;
-                            break;
-                        case 'd':
-                            _debug_level++;
+                        case channel_type::symmetric:
+                            set_master_file(std::move(flA)); break;
+                        case channel_type::read_only:
+                            set_master_file_in(std::move(flA)); break;
+                        case channel_type::write_only:
+                            set_master_file_out(std::move(flB)); break;
+                        case channel_type::separate:
+                            set_master_file_in(std::move(flA));
+                            set_master_file_out(std::move(flB));
                             break;
                         default:
-                            throw config_error(std::string("unknown option -") + o);
+                            throw config_error(std::string("unable to parse master file specification: ") + optarg);
                     }
                 }
-            }
-        } else // positional argument == channel definiton
-        {
-            std::string arg(argv[i]);
-            std::unique_ptr<file_def> fl_def(new file_def);
-            smux_channel ch;
-            if(!parse_channel_spec(arg, ch, *fl_def))
-                throw config_error(std::string("unable to parse channel specification: ") + arg);
-            // finally, add the spec to the channel list
-            if(fl_def->mode == file_mode::io)
-                set_channel_file(ch, std::move(fl_def));
-            else if(fl_def->mode == file_mode::in)
-                set_channel_file_in(ch, std::move(fl_def));
-            else
-                set_channel_file_out(ch, std::move(fl_def));
+                break;
+            case 'c':
+                {
+                    // parse channel spec
+                    std::unique_ptr<file_def> flA(new file_def), flB(new file_def);
+                    smux_channel ch;
+                    auto ct = parse_channel_spec(optarg, ch, *flA, *flB);
+                    switch(ct)
+                    {
+                        case channel_type::symmetric:
+                            set_channel_file(ch, std::move(flA)); break;
+                        case channel_type::read_only:
+                            set_channel_file_in(ch, std::move(flA)); break;
+                        case channel_type::write_only:
+                            set_channel_file_out(ch, std::move(flB)); break;
+                        case channel_type::separate:
+                            set_channel_file_in(ch, std::move(flA));
+                            set_channel_file_out(ch, std::move(flB));
+                            break;
+                        default:
+                            throw config_error(std::string("unable to parse channel specification: ") + optarg);
+                    }
+                }
+                break;
+            case ':':
+                throw config_error(std::string("missing argument for -") + (char)optopt);
+            case '?':
+            default:
+                throw config_error(std::string("unknown option +") + (char)optopt);
         }
     }
 }
 
-static bool parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& fl_def)
+static channel_type parse_channel_spec(std::string const& spec, smux_channel& ch, file_def& flA, file_def& flB)
 {
-    // string up to the first : contains the channel number
-    auto delim = spec.find(':');
-    if(delim == std::string::npos || delim == spec.length())
-        return false;
+    std::string const delim("=");
+    auto delim_ch = spec.find(delim);
+    if(delim_ch == std::string::npos || delim_ch == spec.length())
+        return channel_type::none;
     // extract first characters and convert them to a number
     int ch_num;
     try
@@ -116,57 +96,66 @@ static bool parse_channel_spec(std::string const& spec, smux_channel& ch, file_d
         ch_num = std::stoi(spec);
     } catch(...)
     {
-        return false;
+        return channel_type::none;
     }
     // check range of channel number
     if(ch_num < smux_channel_min || ch_num > smux_channel_max)
-        return false;
+        return channel_type::none;
     // when we are here, we can savely convert the channel number
     ch = static_cast<smux_channel>(ch_num);
 
     // now, parse the file spec, beginning after the first :
-    return parse_file_spec(spec.substr(delim + 1), fl_def);
+    return parse_file_specs(spec.substr(delim_ch + delim.length()), flA, flB);
 }
+
+static channel_type parse_file_specs(std::string const& spec, file_def& flA, file_def& flB)
+{
+    std::string const delim("%");
+    auto delim_io = spec.find(delim);
+
+    // symmetric channel
+    if(delim_io == std::string::npos)
+    {
+        if(parse_file_spec(spec, flA))
+            return channel_type::symmetric;
+        return channel_type::none; // error
+    }
+
+    // has read part only?
+    if(delim_io == spec.length() - delim.length())
+    {
+        if(parse_file_spec(spec.substr(0, delim_io), flA))
+            return channel_type::read_only;
+        return channel_type::none;
+    }
+
+    // has write part only
+    if(delim_io == 0)
+    {
+        if(parse_file_spec(spec.substr(delim.length()), flB))
+            return channel_type::write_only;
+        return channel_type::none;
+    }
+
+    // has separate read/write parts
+    if(parse_file_spec(spec.substr(0, delim_io), flA) && parse_file_spec(spec.substr(delim_io + delim.length()), flB))
+        return channel_type::separate;
+
+    return channel_type::none;
+}
+
 
 static bool parse_file_spec(std::string const& spec, file_def& fl_def)
 {
     std::string const delim(":");
 
-    // up to the first : we can find the file mode (or nothing for io)
-    auto delim_mode = spec.find(delim);
-    if(delim_mode == 0)
-        fl_def.mode = file_mode::io;
-    else if(delim_mode == 1)
-    {
-        if(spec[0] == 'i')
-            fl_def.mode = file_mode::in;
-        else if(spec[0] == 'o')
-            fl_def.mode = file_mode::out;
-        else return false;
-    } else
-        return false; // delim can only be 0 or 1
+    auto delim_arg = spec.find(delim);
+    if(delim_arg != std::string::npos && delim_arg + delim.length() < spec.length()) // argument(s)?
+        fl_def.arg = spec.substr(delim_arg + delim.length());
+    fl_def.type = spec.substr(0, delim_arg);
 
-    // next, we expect the file type (between the first : and the second :)
-    auto delim_type = spec.find(delim, delim_mode + delim.length());
-    if(delim_type == std::string::npos) // no arguments
-        delim_type = spec.length();
-    fl_def.type = spec.substr(delim_mode + delim.length(), delim_type - delim_mode - delim.length());
-
-    // if there are no arguments, stop here
-    if(delim_type >= spec.length())
-        return true;
-
-    // finally, split arguments at the remaining :
-    auto arg_start = delim_type + delim.length();
-    fl_def.arg_string = spec.substr(arg_start); // full argument string
-    auto arg_end = spec.find(delim, arg_start);
-    while(arg_end != std::string::npos)
-    {
-        fl_def.args.emplace_back(spec.substr(arg_start, arg_end - arg_start));
-        arg_start = arg_end + delim.length();
-        arg_end = spec.find(delim, arg_start);
-    }
-    fl_def.args.emplace_back(spec.substr(arg_start)); // save the last argument
+    if(fl_def.type.empty())
+        return false;
 
     return true;
 }

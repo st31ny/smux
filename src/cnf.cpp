@@ -5,6 +5,7 @@ using namespace smux_client;
 
 static void set_symmetric_file(cnf::channel& chan, std::unique_ptr<file_def> fl)
 {
+    fl->mode = file_mode::io;
     chan.type = channel_type::symmetric;
     chan.io = std::move(fl);
     chan.in.reset(nullptr);
@@ -13,6 +14,7 @@ static void set_symmetric_file(cnf::channel& chan, std::unique_ptr<file_def> fl)
 
 static void set_in_file(cnf::channel& chan, std::unique_ptr<file_def> fl)
 {
+    fl->mode = file_mode::in;
     chan.type = channel_type::read_only; // assume this for now
     // if a symmetric master file is defined, move it to out
     if(chan.io)
@@ -27,6 +29,7 @@ static void set_in_file(cnf::channel& chan, std::unique_ptr<file_def> fl)
 
 static void set_out_file(cnf::channel& chan, std::unique_ptr<file_def> fl)
 {
+    fl->mode = file_mode::out;
     chan.type = channel_type::write_only; // assume this for now
     // if a symmetric master file is defined, move it to in
     if(chan.io)

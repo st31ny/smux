@@ -17,11 +17,7 @@ void smux_client::print_file_def(std::ostream& os, smux_client::file_def const& 
         default:
             os << "unk"; break;
     }
-    os << ":";
-    for(auto const& arg : fd.args)
-    {
-        os << arg << ":";
-    }
+    os << ":" << fd.arg;
 }
 
 void smux_client::print_channel_def(std::ostream& os, smux_client::cnf::channel const& ch)

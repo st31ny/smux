@@ -21,7 +21,7 @@ namespace smux_client
              * \param argv
              * \throw config_error
              */
-            void parse(int argc, char const* argv[]);
+            void parse(int argc, char *const argv[]);
 
             /**
              * \brief                   get the program's name as passed in argv

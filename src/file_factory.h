@@ -24,8 +24,6 @@ namespace smux_client
         io  = 6, ///< open file for reading and writing
     };
 
-    /// argument list for file creation
-    using file_args = std::vector<std::string>;
     /// type name of files
     using file_type = std::string;
 
@@ -36,8 +34,7 @@ namespace smux_client
     {
         file_type type; ///< file type
         file_mode mode; ///< open mode of the file
-        file_args args; ///< arguments for file creation
-        std::string arg_string; ///< argument as a single string (unprocessed)
+        std::string arg; ///< argument for file
     };
 
     /**

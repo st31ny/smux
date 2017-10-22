@@ -38,10 +38,10 @@ Examples
 
 Connect the master side to a console at /dev/pts/16 and open terminals for the channels 0 and 42:
 
-    smux --master :file:/dev/pts/16 0::socat:pty,rawer 42::socat:pty,rawer
+    smux -m file:/dev/pts/16 -c 0=socat:pty,rawer -c 42=socat:pty,rawer
 
 Read master side from stdin, write master to a file/pipe called "out" and connect channel 12 to
 stdin/stdout of a "program".
 
-    smux --master i:stdio --master o:file:out 12::exec:program
+    smux -m stdio%file:out 12=exec:program
 

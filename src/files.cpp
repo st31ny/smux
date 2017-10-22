@@ -118,11 +118,9 @@ namespace smux_client
             regular_file(file_def const& fl_def)
             {
                 int flags = 0;
-                auto& args = fl_def.args;
 
                 // parse arguments
-                assert_config(args.size() >= 1, "one argument required");
-                assert_config(args.size() <= 2, "only two arguments supported");
+                assert_config(!fl_def.arg.empty(), "argument required");
                 switch(fl_def.mode)
                 {
                     case file_mode::io:
@@ -134,19 +132,12 @@ namespace smux_client
                     default:
                         throw config_error("invalid file mode");
                 }
-                if(args.size() > 1)
-                {
-                    assert_config(args[1] == "a" || args[1] == "t", "optional flag value unsupported");
-                    if(args[1] == "a")
-                        flags |= O_APPEND;
-                    else
-                    if(args[1] == "t")
-                        flags |= O_TRUNC;
-                }
+                // always open for appending
+                flags |= O_APPEND;
 
                 // open file
                 flags |= O_CLOEXEC;
-                fd_type fd = open(args[0].c_str(), flags, 0666);
+                fd_type fd = open(fl_def.arg.c_str(), flags, 0666);
                 if(fd == -1)
                     throw system_error(errno);
                 switch(fl_def.mode)
@@ -167,7 +158,7 @@ namespace smux_client
         public:
             stdio_file(file_def const& fl_def)
             {
-                assert_config(fl_def.args.size() == 0, "no arguments supported");
+                assert_config(fl_def.arg.empty(), "no argument supported");
 
                 bool fstdin = fl_def.mode != file_mode::out;
                 bool fstdout = fl_def.mode != file_mode::in;
@@ -228,7 +219,7 @@ namespace smux_client
                 std::vector<std::string> args;
                 std::string path;
                 std::string tmp;
-                std::istringstream is(fl_def.arg_string);
+                std::istringstream is(fl_def.arg);
                 is >> path;
                 while(is >> tmp)
                     args.push_back(std::move(tmp));
@@ -258,7 +249,7 @@ namespace smux_client
                 else
                     args.push_back("stdio");
                 // second argument describes other end of connection
-                args.push_back(fl_def.arg_string);
+                args.push_back(fl_def.arg);
 
                 // execute!
                 init(socat_binary, args, fl_def.mode);

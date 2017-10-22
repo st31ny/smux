@@ -67,7 +67,7 @@ void runtime_system::run()
         // shutdown signal received?
         if(_fs_tmp.read.is_set(_pipesig_r))
         {
-            std::clog << "shutdown signal received: exiting main loop" << std::endl;
+            std::clog << "\nshutdown signal received: exiting main loop" << std::endl;
             return;
         }
 
@@ -88,6 +88,12 @@ void runtime_system::run()
                     if(_smux.read() < 0)
                         throw system_error("reading into smux buffer failed");
                     if(0) std::clog << "_smux.read() done" << std::endl;
+
+                    if(master_in->fl->eof())
+                    {
+                        std::clog << "\neof on master in -> shutdown" << std::endl;
+                        return;
+                    }
 
                     // receive data
                     std::size_t ret;

@@ -19,7 +19,7 @@
  *
  * This file contains the header-only C++ wrapper for the smux library (\see{smux.h}).
  *
- * The main class, smux::connection handels buffers and wraps all settings of \ref smux_config.
+ * The main class, smux::connection handels buffers and wraps all settings of \see smux_config.
  */
 
 namespace smux
@@ -44,6 +44,9 @@ namespace smux
             using error::error;
     };
 
+    /// default buffer size
+    enum { DEFAULT_BUF_SIZE = 1024 };
+
     /**
      * \brief                   function type for write function
      * \param buf               data buffer to write
@@ -64,33 +67,27 @@ namespace smux
     using read_fn = ssize_t (void* buf, size_t count);
 
     /**
-     * \brief                   wrapper for a smux configuration/connection
+     * \brief                   wrapper for a smux sender
      */
-    class connection
+    class sender
     {
         public:
             /**
              * \brief                   ctor
-             * \param read_buf_size     reader buffer size (must be >= 16)
-             * \param write_buf_size    writer buffer size (must be >= 16)
+             * \param buf_size          writer buffer size (must be >= 16)
              */
-            connection(size_t read_buf_size = 1024, size_t write_buf_size = 1024)
+            sender(size_t buf_size = DEFAULT_BUF_SIZE)
             {
-                if(read_buf_size < 16 || write_buf_size < 16)
+                if(buf_size < 16)
                     throw config_error("smux requires a buffer size of at least 16 bytes");
-                _write_buf.resize(write_buf_size);
-                _read_buf.resize(read_buf_size);
+                _buf.resize(buf_size);
 
                 // init smux config
-                smux_init(&_smux);
-                _smux.buffer.write_buf = _write_buf.data();
-                _smux.buffer.write_buf_size = _write_buf.size();
+                smux_init(&_smux, nullptr);
+                _smux.buffer.write_buf = _buf.data();
+                _smux.buffer.write_buf_size = _buf.size();
                 _smux.buffer.write_fn = writer;
                 _smux.buffer.write_fd = reinterpret_cast<void*>(&_write_fn);
-                _smux.buffer.read_buf = _read_buf.data();
-                _smux.buffer.read_buf_size = _read_buf.size();
-                _smux.buffer.read_fn = reader;
-                _smux.buffer.read_fd = reinterpret_cast<void*>(&_read_fn);
             }
 
             /**
@@ -105,17 +102,6 @@ namespace smux
             }
 
             /**
-             * \brief                   set the read function
-             *
-             * The read function is called by smux to actully read data before decoding.
-             * You usually want to set it.
-             */
-            void set_read_fn(std::function<read_fn> fn)
-            {
-                _read_fn = std::move(fn);
-            }
-
-            /**
              * \brief                   low-level send function
              * \see                     smux_send
              *
@@ -127,6 +113,98 @@ namespace smux
             }
 
             /**
+             * \brief                   low-level write function
+             * \see                     smux_write
+             */
+            ssize_t write()
+            {
+                return smux_write(&_smux);
+            }
+
+            /**
+             * \brief                   low-level write_buf function
+             * \see                     smux_write_buf
+             * TODO: not yet implemented
+             */
+            //size_t write_buf(void *buf, size_t count);
+
+            /**
+             * \brief                   get the internal config
+             */
+            smux_config_send* smux()
+            {
+                return &_smux;
+            }
+
+            // sorry, no copy
+            sender(sender const&) = delete;
+            sender& operator=(sender const&) = delete;
+            // move invalidates _write_buf.data()
+            sender(sender&&) = delete;
+            sender& operator=(sender&&) = delete;
+
+            /**
+             * \brief                   dtor
+             */
+            ~sender()
+            {
+                smux_free(&_smux, nullptr);
+            }
+
+        protected:
+            template<class charT, class traits, class Alloc>
+            friend class basic_ostream;
+
+            // adapter for write function
+            static
+            ssize_t writer(void* fd, const void *buf, size_t count)
+            {
+                auto& fn = *reinterpret_cast<std::function<write_fn>*>(fd);
+                return fn(buf, count);
+            }
+
+            smux_config_send _smux;
+            using buffer = std::vector<char>;
+            buffer _buf;
+            std::function<write_fn> _write_fn;
+    };
+
+    /**
+     * \brief                   wrapper for a smux receiver
+     */
+    class receiver
+    {
+        public:
+            /**
+             * \brief                   ctor
+             * \param buf_size          reader buffer size (must be >= 16)
+             */
+            receiver(size_t buf_size = DEFAULT_BUF_SIZE)
+            {
+                if(buf_size < 16)
+                    throw config_error("smux requires a buffer size of at least 16 bytes");
+                _buf.resize(buf_size);
+
+                // init smux config
+                smux_init(nullptr, &_smux);
+                _smux.buffer.read_buf = _buf.data();
+                _smux.buffer.read_buf_size = _buf.size();
+                _smux.buffer.read_fn = reader;
+                _smux.buffer.read_fd = reinterpret_cast<void*>(&_read_fn);
+            }
+
+            /**
+             * \brief                   set the read function
+             *
+             * The read function is called by smux to actully read data before decoding.
+             * You usually want to set it.
+             */
+            void set_read_fn(std::function<read_fn> fn)
+            {
+                _read_fn = std::move(fn);
+            }
+
+            /**
              * \brief                   low-level receive function
              * \see                     smux_recv
              *
@@ -135,15 +213,6 @@ namespace smux
             size_t recv(smux_channel *ch, void *buf, size_t count)
             {
                 return smux_recv(&_smux, ch, buf, count);
-            }
-
-            /**
-             * \brief                   low-level write function
-             * \see                     smux_write
-             */
-            ssize_t write()
-            {
-                return smux_write(&_smux);
             }
 
             /**
@@ -165,42 +234,31 @@ namespace smux
             }
 
             /**
-             * \brief                   get raw access to the smux config if you are brave
-             * \return                  pointer to the used smux_config
+             * \brief                   get the internal config
              */
-            smux_config* smux()
+            smux_config_recv* smux()
             {
                 return &_smux;
             }
 
             // sorry, no copy
-            connection(connection const&) = delete;
-            connection& operator=(connection const&) = delete;
+            receiver(receiver const&) = delete;
+            receiver& operator=(receiver const&) = delete;
             // move invalidates _write_buf.data()
-            connection(connection&&) = delete;
-            connection& operator=(connection&&) = delete;
+            receiver(receiver&&) = delete;
+            receiver& operator=(receiver&&) = delete;
 
             /**
              * \brief                   dtor
              */
-            ~connection()
+            ~receiver()
             {
-                smux_free(&_smux);
+                smux_free(nullptr, &_smux);
             }
 
         protected:
             template<class charT, class traits, class Alloc>
-            friend class basic_ostream;
-            template<class charT, class traits, class Alloc>
             friend class basic_istream;
-
-            // adapter for write function
-            static
-            ssize_t writer(void* fd, const void *buf, size_t count)
-            {
-                auto& fn = *reinterpret_cast<std::function<write_fn>*>(fd);
-                return fn(buf, count);
-            }
 
             // adapter for read function
             static
@@ -210,11 +268,27 @@ namespace smux
                 return fn(buf, count);
             }
 
-            smux_config _smux;
+            smux_config_recv _smux;
             using buffer = std::vector<char>;
-            buffer _write_buf, _read_buf;
-            std::function<write_fn> _write_fn;
+            buffer _buf;
             std::function<read_fn> _read_fn;
+    };
+
+    /**
+     * \brief                   smux connection containing a sender and a receiver
+     */
+    class connection : public sender, public receiver
+    {
+        public:
+            /**
+             * \brief                   ctor
+             * \param write_buf_size    writer buffer size (must be >= 16)
+             * \param read_buf_size     reader buffer size (must be >= 16)
+             */
+            connection(size_t write_buf_size = DEFAULT_BUF_SIZE, size_t read_buf_size = DEFAULT_BUF_SIZE)
+                : sender(write_buf_size)
+                , receiver(read_buf_size)
+            {}
     };
 
     /**
@@ -226,10 +300,10 @@ namespace smux
         public:
             /**
              * \brief                   ctor
-             * \param smux              a smux connection to send on
+             * \param smux              a smux sender to send on
              * \param ch                initial channel (can be changed with channel())
              */
-            basic_ostream(connection& smux, smux_channel ch = 0)
+            basic_ostream(sender& smux, smux_channel ch = 0)
                 : std::basic_ostream<charT, traits>(&_sb) // this is safe according to the standard
                 , _sb(&smux._smux, ch)
             {
@@ -256,7 +330,7 @@ namespace smux
         private:
             struct sendbuf : std::basic_stringbuf<charT, traits, Alloc>
             {
-                sendbuf(smux_config* smux, smux_channel ch)
+                sendbuf(smux_config_send* smux, smux_channel ch)
                     : _smux(smux), _ch(ch)
                 {}
 
@@ -278,7 +352,7 @@ namespace smux
                     return 0;
                 }
 
-                smux_config* _smux;
+                smux_config_send* _smux;
                 smux_channel _ch;
             } _sb;
     };
@@ -292,9 +366,9 @@ namespace smux
         public:
             /**
              * \brief                   ctor
-             * \param smux              a smux connection to receive from
+             * \param smux              a smux receiver to receive from
              */
-            basic_istream(connection& smux)
+            basic_istream(receiver& smux)
                 : std::basic_istream<charT, traits>(&_rb) // this is safe according to the standard
                 , _rb(&smux._smux)
             {
@@ -329,7 +403,7 @@ namespace smux
         private:
             struct recvbuf : std::basic_streambuf<charT, traits>
             {
-                recvbuf(smux_config* smux)
+                recvbuf(smux_config_recv* smux)
                     : _smux(smux)
                     , _size(0)
                     , _fReset(true)
@@ -379,7 +453,7 @@ namespace smux
                         : traits::to_int_type(*this->gptr());
                 }
 
-                smux_config* _smux;
+                smux_config_recv* _smux;
                 std::vector<charT, Alloc> _buf;
                 smux_channel _ch, _chNext; // current and next channel
                 size_t _size; // valid chars in _buf

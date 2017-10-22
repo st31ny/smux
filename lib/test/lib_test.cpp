@@ -9,22 +9,23 @@ namespace utf = boost::unit_test;
 class TestLibFixture
 {
     public:
-        smux_config smux;
+        smux_config_send sender;
+        smux_config_recv receiver;
         char read_buf[32];
         char write_buf[32];
 
         TestLibFixture()
         {
-            smux_init(&smux);
-            smux.buffer.read_buf = read_buf;
-            smux.buffer.read_buf_size = sizeof(read_buf);
-            smux.buffer.write_buf = write_buf;
-            smux.buffer.write_buf_size = sizeof(write_buf);
+            smux_init(&sender, &receiver);
+            receiver.buffer.read_buf = read_buf;
+            receiver.buffer.read_buf_size = sizeof(read_buf);
+            sender.buffer.write_buf = write_buf;
+            sender.buffer.write_buf_size = sizeof(write_buf);
         }
 
         ~TestLibFixture()
         {
-            smux_free(&smux);
+            smux_free(&sender, &receiver);
         }
 };
 
@@ -39,7 +40,7 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
     char muxed[] = "ABC\x01\x00""DEF\x01\x42\x00\x04""123\x01\x00""GH";
     unsigned size = sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&smux, muxed, size);
+    ret = smux_read_buf(&receiver, muxed, size);
     BOOST_TEST(ret == size);
 
     char recv[32];
@@ -47,7 +48,7 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
 
     // check first chunk
     ch = 1;
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 7);
     recv[ret] = 0;
     BOOST_TEST(ch == 0);
@@ -57,32 +58,32 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
     // > abcd on channel 255
     char muxed2[] = "\x01\xff\x00\x04""abcd";
     size = sizeof(muxed2) - 1;
-    ret = smux_read_buf(&smux, muxed2, size);
+    ret = smux_read_buf(&receiver, muxed2, size);
     BOOST_TEST(size == ret);
 
     // check 2nd chunk
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 4);
     recv[ret] = 0;
     BOOST_TEST(ch == 0x42);
     BOOST_TEST(recv == "123\x01");
 
     // check 3rd chunk
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 2);
     recv[ret] = 0;
     BOOST_TEST(ch == 0);
     BOOST_TEST(recv =="GH");
 
     // check 4th chunk
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 4);
     recv[ret] = 0;
     BOOST_TEST(ch == 255);
     BOOST_TEST(recv == "abcd");
 
     // verify that buffer is empty now
-    BOOST_TEST(smux._internal.read_buf_head == smux._internal.read_buf_tail);
+    BOOST_TEST(receiver._internal.read_buf_head == receiver._internal.read_buf_tail);
 }
 
 BOOST_AUTO_TEST_CASE(read_buf_overlong)
@@ -92,7 +93,7 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
     char* p = muxed;
     char* e = muxed + sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&smux, muxed, e - p);
+    ret = smux_read_buf(&receiver, muxed, e - p);
     BOOST_TEST(ret == 31);
     p += ret;
 
@@ -101,38 +102,38 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
 
     // read first chunk
     ch = 1;
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 10);
     recv[ret] = 0;
     BOOST_TEST(ch == 0);
     BOOST_TEST(recv == "1234567890");
 
     // supply some more data
-    ret = smux_read_buf(&smux, p, 2);
+    ret = smux_read_buf(&receiver, p, 2);
     BOOST_TEST(ret == 2);
     p += ret;
 
     // read next chunk
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 19);
     recv[ret] = 0;
     BOOST_TEST(ch == 0x42);
     BOOST_TEST(recv == "1234567890123456789");
 
     // supply rest of data
-    ret = smux_read_buf(&smux, p, e - p);
+    ret = smux_read_buf(&receiver, p, e - p);
     BOOST_TEST(ret == 11);
 
     // read last chunk
     ch = 0;
-    ret = smux_recv(&smux, &ch, recv, sizeof(recv) - 1);
+    ret = smux_recv(&receiver, &ch, recv, sizeof(recv) - 1);
     BOOST_TEST(ret == 11);
     recv[ret] = 0;
     BOOST_TEST(ch == 0x42);
     BOOST_TEST(recv == "01234567890");
 
     // buffer is empty now
-    BOOST_TEST(smux._internal.read_buf_head == smux._internal.read_buf_tail);
+    BOOST_TEST(receiver._internal.read_buf_head == receiver._internal.read_buf_tail);
 }
 
 BOOST_AUTO_TEST_CASE(read_into_short_buf)
@@ -141,7 +142,7 @@ BOOST_AUTO_TEST_CASE(read_into_short_buf)
     char muxed[] = "ABCDEF\x01\x42\x00\x05""12345";
     unsigned size = sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&smux, muxed, size);
+    ret = smux_read_buf(&receiver, muxed, size);
     BOOST_TEST(ret == size);
 
     char recv[5];
@@ -150,7 +151,7 @@ BOOST_AUTO_TEST_CASE(read_into_short_buf)
 
     // read 1st chunk
     ch = 1;
-    ret = smux_recv(&smux, &ch, recv, size);
+    ret = smux_recv(&receiver, &ch, recv, size);
     BOOST_TEST(ret == size);
     recv[ret] = 0;
     BOOST_TEST(ch == 0);
@@ -158,14 +159,14 @@ BOOST_AUTO_TEST_CASE(read_into_short_buf)
 
     // read more of 1st chunk
     ch = 1;
-    ret = smux_recv(&smux, &ch, recv, size);
+    ret = smux_recv(&receiver, &ch, recv, size);
     BOOST_TEST(ret == 2);
     recv[ret] = 0;
     BOOST_TEST(ch == 0);
     BOOST_TEST(recv == "EF");
 
     // read 2nd chunk
-     ret = smux_recv(&smux, &ch, recv, size);
+     ret = smux_recv(&receiver, &ch, recv, size);
     BOOST_TEST(ret == size);
     recv[ret] = 0;
     BOOST_TEST(ch == 0x42);
@@ -173,7 +174,7 @@ BOOST_AUTO_TEST_CASE(read_into_short_buf)
 
     // read rest 2nd chunk
     ch = 0;
-    ret = smux_recv(&smux, &ch, recv, size);
+    ret = smux_recv(&receiver, &ch, recv, size);
     BOOST_TEST(ret == 1);
     recv[ret] = 0;
     BOOST_TEST(ch == 0x42);

@@ -23,22 +23,28 @@ enum
   PROTO_MAX_SIZE      = (1 << PROTO_SIZE_BYTES * 8) - 1,
 };
 
-void smux_init(struct smux_config *config)
+void smux_init(struct smux_config_send *cs, struct smux_config_recv *cr)
 {
-    // just zero-initialize everything
-    memset(config, 0, sizeof(*config));
-
-    // non-zero stuff
-    config->proto.esc = '\x01';
+    if(cr)
+    {
+        memset(cr, 0, sizeof(*cr));
+        cr->proto.esc = '\x01';
+    }
+    if(cs)
+    {
+        memset(cs, 0, sizeof(*cs));
+        cs->proto.esc = '\x01';
+    }
 }
 
-void smux_free(struct smux_config *config)
+void smux_free(struct smux_config_send *cs, struct smux_config_recv *cr)
 {
-    (void)config;
+    (void)cr;
+    (void)cs;
     // no clean-up needed currently
 }
 
-size_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, size_t count)
+size_t smux_send(struct smux_config_send *config, smux_channel ch, const void *buf, size_t count)
 {
     char *write_buf = (char*)config->buffer.write_buf;
     unsigned write_buf_head = config->_internal.write_buf_head;
@@ -110,7 +116,7 @@ size_t smux_send(struct smux_config *config, smux_channel ch, const void *buf, s
     return count_copied;
 }
 
-size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t count)
+size_t smux_recv(struct smux_config_recv *config, smux_channel *ch, void *buf, size_t count)
 {
     char *read_buf = (char*)config->buffer.read_buf;
     unsigned read_buf_head = config->_internal.read_buf_head;
@@ -200,7 +206,7 @@ size_t smux_recv(struct smux_config *config, smux_channel *ch, void *buf, size_t
     return count_copied;
 }
 
-ssize_t smux_write(struct smux_config *config)
+ssize_t smux_write(struct smux_config_send *config)
 {
     char *write_buf = (char*)config->buffer.write_buf;
     unsigned write_buf_head = config->_internal.write_buf_head;
@@ -243,7 +249,7 @@ ssize_t smux_write(struct smux_config *config)
     return RBUSED(write_buf_head, write_buf_tail, write_buf_size);
 }
 
-ssize_t smux_read(struct smux_config *config)
+ssize_t smux_read(struct smux_config_recv *config)
 {
     char *read_buf = (char*)config->buffer.read_buf;
     unsigned read_buf_head = config->_internal.read_buf_head;
@@ -285,7 +291,7 @@ ssize_t smux_read(struct smux_config *config)
     return read_buf_size - RBUSED(read_buf_head, read_buf_tail, read_buf_size) - 1;
 }
 
-size_t smux_read_buf(struct smux_config *config, const void* buf, size_t count)
+size_t smux_read_buf(struct smux_config_recv *config, const void* buf, size_t count)
 {
     char *read_buf = (char*)config->buffer.read_buf;
     unsigned read_buf_head = config->_internal.read_buf_head;

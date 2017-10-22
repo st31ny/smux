@@ -133,6 +133,8 @@ void runtime_system::run()
                     buf.resize(RECEIVE_BUFFER_SIZE);
 
                     std::size_t ret = hc.fl->read(buf.data(), buf.size());
+                    if(hc.fl->eof())
+                        std::clog << "\neof on channel " << static_cast<int>(hc.ch) << std::endl;
                     if(ret > 0)
                     {
                         std::clog << '<' << static_cast<int>(hc.ch) << std::flush;

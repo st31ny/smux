@@ -1,46 +1,60 @@
-// lib_test.cpp
-#include <boost/test/unit_test.hpp>
-namespace utf = boost::unit_test;
+// read_decode_test.cpp
+#include "lib_test.h"
 
-#include <cstring>
-
-#include <smux.h>
-
-class TestLibFixture
+struct SmuxReader
 {
-    public:
-        smux_config_send sender;
-        smux_config_recv receiver;
-        char read_buf[32];
-        char write_buf[32];
+    SmuxReader(TestLibFixture* fixture)
+        : _f(fixture)
+    {}
 
-        TestLibFixture()
-        {
-            smux_init(&sender, &receiver);
-            receiver.buffer.read_buf = read_buf;
-            receiver.buffer.read_buf_size = sizeof(read_buf);
-            sender.buffer.write_buf = write_buf;
-            sender.buffer.write_buf_size = sizeof(write_buf);
-        }
+    // return num of read chars
+    virtual size_t read(char const* data, size_t count) = 0;
 
-        ~TestLibFixture()
-        {
-            smux_free(&sender, &receiver);
-        }
+    TestLibFixture* _f;
 };
 
-BOOST_FIXTURE_TEST_SUITE(lib_test, TestLibFixture);
-
-BOOST_AUTO_TEST_CASE(read_buf_test)
+struct ReadBufReader : public SmuxReader
 {
-    size_t ret;
+    using SmuxReader::SmuxReader;
+
+    size_t read(char const* data, size_t count)
+    {
+        return smux_read_buf(&_f->receiver, data, count);
+    }
+};
+
+struct ReadFnReader : public SmuxReader
+{
+    using SmuxReader::SmuxReader;
+
+    size_t read(char const* data, size_t count)
+    {
+        _f->reader_dat = data;
+        _f->reader_dat_len = count;
+        _f->reader_called = 0;
+        smux_read(&_f->receiver);
+        BOOST_TEST(_f->reader_called >= 1);
+        return count - _f->reader_dat_len;
+    }
+};
+
+typedef boost::mpl::list<ReadBufReader, ReadFnReader> readers;
+
+
+BOOST_FIXTURE_TEST_SUITE(read_decode, TestLibFixture);
+
+BOOST_AUTO_TEST_CASE_TEMPLATE(read_buf_decode, R, readers)
+{
+    R reader(this);
+
+    ssize_t ret;
     // > ABC\x01DEF on channel 0
     // > 123\x01 on channel \x42
     // > GH on channel 0
     char muxed[] = "ABC\x01\x00""DEF\x01\x42\x00\x04""123\x01\x00""GH";
     unsigned size = sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&receiver, muxed, size);
+    ret = reader.read(muxed, size);
     BOOST_TEST(ret == size);
 
     char recv[32];
@@ -58,7 +72,7 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
     // > abcd on channel 255
     char muxed2[] = "\x01\xff\x00\x04""abcd";
     size = sizeof(muxed2) - 1;
-    ret = smux_read_buf(&receiver, muxed2, size);
+    ret = reader.read(muxed2, size);
     BOOST_TEST(size == ret);
 
     // check 2nd chunk
@@ -86,14 +100,16 @@ BOOST_AUTO_TEST_CASE(read_buf_test)
     BOOST_TEST(receiver._internal.rb_head == receiver._internal.rb_tail);
 }
 
-BOOST_AUTO_TEST_CASE(read_buf_overlong)
+BOOST_AUTO_TEST_CASE_TEMPLATE(read_buf_overlong_decode, R, readers)
 {
-    unsigned ret;
+    R reader(this);
+
+    ssize_t ret;
     char muxed[] = "1234567890\x01\x42\x00\x1E""123456789012345678901234567890";
     char* p = muxed;
     char* e = muxed + sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&receiver, muxed, e - p);
+    ret = reader.read(muxed, e - p);
     BOOST_TEST(ret == 31);
     p += ret;
 
@@ -109,7 +125,7 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
     BOOST_TEST(recv == "1234567890");
 
     // supply some more data
-    ret = smux_read_buf(&receiver, p, 2);
+    ret = reader.read(p, 2);
     BOOST_TEST(ret == 2);
     p += ret;
 
@@ -121,7 +137,7 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
     BOOST_TEST(recv == "1234567890123456789");
 
     // supply rest of data
-    ret = smux_read_buf(&receiver, p, e - p);
+    ret = reader.read(p, e - p);
     BOOST_TEST(ret == 11);
 
     // read last chunk
@@ -136,13 +152,15 @@ BOOST_AUTO_TEST_CASE(read_buf_overlong)
     BOOST_TEST(receiver._internal.rb_head == receiver._internal.rb_tail);
 }
 
-BOOST_AUTO_TEST_CASE(read_into_short_buf)
+BOOST_AUTO_TEST_CASE_TEMPLATE(read_into_short_buf_decode, R, readers)
 {
-    unsigned ret;
+    R reader(this);
+
+    ssize_t ret;
     char muxed[] = "ABCDEF\x01\x42\x00\x05""12345";
     unsigned size = sizeof(muxed) - 1;
 
-    ret = smux_read_buf(&receiver, muxed, size);
+    ret = reader.read(muxed, size);
     BOOST_TEST(ret == size);
 
     char recv[5];

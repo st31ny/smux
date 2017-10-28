@@ -2,7 +2,6 @@
 #ifndef _LIB_TEST_H_
 #define _LIB_TEST_H_
 
-#define BOOST_TEST_MODULE smux_lib
 #include <boost/test/unit_test.hpp>
 #include <boost/test/test_case_template.hpp>
 #include <boost/mpl/list.hpp>
@@ -65,6 +64,8 @@ class TestLibFixture
             TestLibFixture* f = reinterpret_cast<TestLibFixture*>(fd);
             ssize_t len = count > f->writer_buf_len ? f->writer_buf_len : count;
             std::memcpy(f->writer_buf, buf, len);
+            f->writer_buf += len;
+            f->writer_buf_len -= len;
 
             f->writer_req = count;
             f->writer_ret = len;

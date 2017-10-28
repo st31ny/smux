@@ -312,9 +312,12 @@ namespace smux
             /**
              * \brief                   set the channel to send on
              * \param ch                new channel
+             *
+             * Flushes before setting the channel.
              */
             void channel(smux_channel ch)
             {
+                _sb.sync();
                 _sb._ch = ch;
             }
 

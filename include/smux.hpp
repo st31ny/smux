@@ -343,7 +343,8 @@ namespace smux
                     size_t ret = 0;
                     while(data.size() > 0)
                     {
-                        ret = smux_send(_smux, _ch, data.data(), data.size());
+                        // TODO: byte order
+                        ret = smux_send(_smux, _ch, reinterpret_cast<const void*>(data.data()), data.size()*sizeof(charT));
                         if(ret <= 0) break;
                         data.erase(0, ret); // remove the part that was written
                         ret = smux_write(_smux);
@@ -424,7 +425,7 @@ namespace smux
                 {
                     if(this->gptr() == this->egptr())
                     {
-                        // TODO: Is this wise here? Otherwise, smux_recv hangs,
+                        // TODO: Is this wise here? Otherwise, smux_read might hang,
                         // waiting for characters.
                         if(!_fReset)
                             return traits::eof();
@@ -438,7 +439,8 @@ namespace smux
                                 return traits::eof();
                             }
 
-                            _size = smux_recv(_smux, &_chNext, _buf.data(), _buf.size());
+                            // TODO: byte order
+                            _size = smux_recv(_smux, &_chNext, reinterpret_cast<void*>(_buf.data()), _buf.size()*sizeof(charT));
                         }
 
                         // make data available iff in reset state
